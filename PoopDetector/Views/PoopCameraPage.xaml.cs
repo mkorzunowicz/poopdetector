@@ -58,7 +58,7 @@ namespace PoopDetector.Views
             var x_enc = p.Value.X * scale;
             var y_enc = p.Value.Y * scale;
 
-            Debug.WriteLine($"scale: ({sx}, {sy} ) cam: ({p.Value.X},{p.Value.Y}) mask:({frozenImage.Width},{frozenImage.Height})");
+            //Debug.WriteLine($"scale: ({sx}, {sy} ) cam: ({p.Value.X},{p.Value.Y}) mask:({frozenImage.Width},{frozenImage.Height})");
 
             await _viewModel.CurrentPrediction.RunSamDecode(
                     new Microsoft.Maui.Graphics.PointF((float)x_enc, (float)y_enc));
@@ -77,7 +77,7 @@ namespace PoopDetector.Views
             }
 
             var mask = pr.MaskBitmaps[0];
-            Debug.WriteLine("masks: " + pr.MaskBitmaps.Count);
+            //Debug.WriteLine("masks: " + pr.MaskBitmaps.Count);
             if (mask.IsEmpty) return;
             if (mask.IsNull) return;
             if (!mask.ReadyToDraw) return;
@@ -178,7 +178,8 @@ namespace PoopDetector.Views
                             await Task.Delay(100);
                             continue;
                         }
-                        var stream = cameraView.GetSnapShotStream(Camera.MAUI.ImageFormat.JPEG);
+
+                        var stream = await cameraView.TakePhotoAsync(Camera.MAUI.ImageFormat.JPEG);
                         if (stream == null || !stream.CanRead)
                         {
                             await Task.Delay(100);

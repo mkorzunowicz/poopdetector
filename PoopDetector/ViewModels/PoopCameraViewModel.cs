@@ -153,7 +153,7 @@ namespace PoopDetector.ViewModel
             {
                 if (IsOnline())
                 {
-                    await _poopPictureService.SendPicture(FrozenPicture);
+                    //await _poopPictureService.SendPicture(FrozenPicture);
                 }
                 else
                 {

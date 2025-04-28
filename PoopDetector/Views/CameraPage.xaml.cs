@@ -1,4 +1,5 @@
 using Camera.MAUI;
+using Microsoft.Maui.Controls.PlatformConfiguration;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Storage;
 using Microsoft.ML.Data;
@@ -7,6 +8,7 @@ using PoopDetector.AI.Vision;
 using PoopDetector.ViewModel;
 using SkiaSharp;
 using SkiaSharp.Views.Maui;
+using System;
 using System.Diagnostics;
 using System.IO;
 using static Microsoft.Maui.ApplicationModel.Permissions;
@@ -77,9 +79,8 @@ public partial class CameraPage : ContentPage
             {
                 try
                 {
-                    var stream = cameraView.GetSnapShotStream(Camera.MAUI.ImageFormat.JPEG);
-                    //var stream = cameraView.GetSnapShotStream();
-                    //var stream = await cameraView.TakePhotoAsync();
+                    var stream = await cameraView.TakePhotoAsync(Camera.MAUI.ImageFormat.JPEG);
+
                     if (stream == null || !stream.CanRead) continue;
 
 
@@ -116,22 +117,6 @@ public partial class CameraPage : ContentPage
         });
     }
 
-    // 1. We need to make sure the bounding box is of size: 2/4 of the screen, so the camera has to be quite close to the object
-    // Or be in a rather high zoom ratio
-    // 2. Let's test how high is the the chance that what we see is poop. Let's aim >80%
-    // 3. We could also run another model - YOLOv7 to check if what we see isn't something different (but preferably the model should include those)
-    // 4. Let's gather 3-5 of such pictures and store them. One stored 640x640 image is about 300kB, so 1,5MB, 100000 pictures = 115GB
-    // 5. Calculate the average probability of the 5 pictures
-    // 6. Poop overlay on the camera page + some progress circle
-    // The progress circle is quite important for slower processors so it's clear, the data is read
-    // 7. We could also run some YOLOX L on the server side, just to make sure we see what we should.
-
-    // 8. Pickup confirmation.
-    // 8a. We could take a picture of a full poop bag lying next to the poop loction - we can also train a model to recognize those
-    // 8b. We could take a picture of the poop location and try to run a comparison of pixels from OpenCV - this could be scetchy.
-    // Either way, only when we confirm that both the poop picture as well as confirmation are solid - we save the pic in DB.
-    // 9. We could also save some accelerometer data, to make sure the phone didn't move to far from the poop location -
-    // like 'hey, where did you go?'
     int height, width;
     private async Task GetVisionPrediction(Stream stream)
     {

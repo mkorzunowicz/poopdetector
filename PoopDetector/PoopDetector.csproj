@@ -93,6 +93,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<PackageReference Include="Camera.MAUI" Version="1.5.1" />
 		<PackageReference Include="CommunityToolkit.Maui" Version="11.2.0" />
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
 		<PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.3" />
@@ -117,7 +118,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\..\misc\Camera.Maui\Camera.MAUI\Camera.MAUI.csproj" />
 	  <ProjectReference Include="..\PoopDetector.Common\PoopDetector.Common.csproj" />
 	</ItemGroup>
 
