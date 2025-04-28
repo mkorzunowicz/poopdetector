@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - actions
   pull_request:
     branches: [main]
   workflow_dispatch: # manual trigger
@@ -41,7 +40,6 @@ jobs:
 
       - name: Publish Android APK
         run: dotnet publish ${{ env.PROJECT_PATH }} -c Release -f net9.0-android -p:RunAOTCompilation=false -p:AndroidPackageFormat=apk -o "${{ env.ANDROID_OUT }}"
-        # AndroidPackageFormat=apk forces APK output instead of the default AAB :contentReference[oaicite:0]{index=0}
 
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
@@ -73,15 +71,6 @@ jobs:
       - name: Publish Windows build (unpackaged)
         run: dotnet publish ${{ env.PROJECT_PATH }} -c Release -f net9.0-windows10.0.19041.0 -p:WindowsPackageType=None -p:RuntimeIdentifierOverride=win10-x64 -p:WindowsAppSDKSelfContained=true -o "${{ env.WINDOWS_OUT }}"
      
-        # run: |
-        #   dotnet publish ${{ env.PROJECT_PATH }} \
-        #     -c Release \
-        #     -f net9.0-windows10.0.19041.0 \
-        #     -p:WindowsPackageType=None \
-        #     -p:RuntimeIdentifierOverride=win10-x64 \
-        #     -p:WindowsAppSDKSelfContained=true \
-        #     -o "${{ env.WINDOWS_OUT }}"
-
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
