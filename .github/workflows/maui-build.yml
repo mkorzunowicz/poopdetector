@@ -13,7 +13,7 @@ on:
 # Shared settings
 # ------------------------------------------------------------------
 env:
-  PROJECT_PATH: "src/MyApp/MyApp.csproj" # ← update to your .csproj
+  PROJECT_PATH: "src/PoopDetector/PoopDetector.csproj" 
   ANDROID_OUT: "${{ github.workspace }}/artifacts/android"
   WINDOWS_OUT: "${{ github.workspace }}/artifacts/windows"
 
