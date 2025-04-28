@@ -1,0 +1,78 @@
+name: Build Android (APK) + Windows (.NET MAUI 9)
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches: [main]
+  workflow_dispatch: # manual trigger
+
+# ------------------------------------------------------------------
+# Shared settings
+# ------------------------------------------------------------------
+env:
+  PROJECT_PATH: "PoopDetector/PoopDetector.csproj" 
+  ANDROID_OUT: "${{ github.workspace }}/artifacts/android"
+  WINDOWS_OUT: "${{ github.workspace }}/artifacts/windows"
+
+# ------------------------------------------------------------------
+# Android job – produces an APK
+# ------------------------------------------------------------------
+jobs:
+  android:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 9 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Install MAUI workload
+        run: |
+          dotnet workload install maui --skip-sign-check
+          dotnet workload restore
+
+      - name: Restore NuGet packages
+        run: dotnet restore ${{ env.PROJECT_PATH }}
+
+      - name: Publish Android APK
+        run: dotnet publish ${{ env.PROJECT_PATH }} -c Release -f net9.0-android -p:RunAOTCompilation=false -p:AndroidPackageFormat=apk -o "${{ env.ANDROID_OUT }}"
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: ${{ env.ANDROID_OUT }}/*.apk
+
+  # ------------------------------------------------------------------
+  # Windows job – produces an unpackaged EXE
+  # ------------------------------------------------------------------
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 9 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Install MAUI workload
+        run: |
+          dotnet workload install maui --skip-sign-check
+          dotnet workload restore
+
+      - name: Restore NuGet packages
+        run: dotnet restore ${{ env.PROJECT_PATH }}
+
+      - name: Publish Windows build (unpackaged)
+        run: dotnet publish ${{ env.PROJECT_PATH }} -c Release -f net9.0-windows10.0.19041.0 -p:WindowsPackageType=None -p:RuntimeIdentifierOverride=win10-x64 -p:WindowsAppSDKSelfContained=true -o "${{ env.WINDOWS_OUT }}"
+     
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: ${{ env.WINDOWS_OUT }}/**
