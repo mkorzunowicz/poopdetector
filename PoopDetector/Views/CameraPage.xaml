@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="PoopDetector.Views.CameraPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:cv="clr-namespace:Camera.MAUI;assembly=Camera.MAUI"
+    xmlns:skia="clr-namespace:SkiaSharp.Views.Maui.Controls;assembly=SkiaSharp.Views.Maui.Controls"
+    xmlns:viewModels="clr-namespace:PoopDetector.ViewModel"
+    Title="CameraPage"
+    x:DataType="viewModels:CameraViewModel">
+    <Grid
+        HorizontalOptions="Fill"
+        RowDefinitions="*,200"
+        VerticalOptions="Fill">
+        <cv:CameraView
+            x:Name="cameraView"
+            Grid.Row="0"
+            HorizontalOptions="Fill"
+            VerticalOptions="Fill" />
+
+        <Label
+            x:Name="fpsText"
+            FontSize="Large"
+            HorizontalOptions="End"
+            IsVisible="True"
+            Text="{Binding FPS}"
+            TextColor="Red"
+            VerticalOptions="Start" />
+
+        <Image
+            Margin="-400"
+            Opacity="0.6"
+            Source="poop_icon_overlay.png" />
+        <skia:SKCanvasView x:Name="canvasView" PaintSurface="OnCanvasViewPaintSurface" />
+        <VerticalStackLayout Grid.Row="1">
+            <Button
+                Command="{Binding SavePictureCommand}"
+                HeightRequest="40"
+                IsEnabled="True"
+                Text="Send pic" />
+            <Picker
+                Title="Available models"
+                Grid.Row="2"
+                HeightRequest="60"
+                ItemsSource="{Binding ModelTypes}"
+                SelectedItem="{Binding SelectedModelType}"
+                VerticalOptions="Start" />
+
+            <Picker
+                x:Name="cameraPicker"
+                Title="Available cameras"
+                Grid.Row="2"
+                HeightRequest="60"
+                ItemDisplayBinding="{Binding Name}"
+                ItemsSource="{Binding Cameras}"
+                SelectedItem="{Binding SelectedCamera}"
+                VerticalOptions="End" />
+        </VerticalStackLayout>
+
+    </Grid>
+</ContentPage>

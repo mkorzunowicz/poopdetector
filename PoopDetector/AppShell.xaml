@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell
+    x:Class="PoopDetector.AppShell"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:local="clr-namespace:PoopDetector.Views"
+    xmlns:viewModels="clr-namespace:PoopDetector.ViewModel"
+    Title="PoopDetector"
+    x:DataType="viewModels:AppShellViewModel"
+    Shell.FlyoutBehavior="Flyout">
+
+    <!--<FlyoutItem FlyoutDisplayOptions="AsMultipleItems" Route="animals">
+
+        <Tab Title="Domestic" Route="domestic">
+            <ShellContent
+                Title="Home"
+                ContentTemplate="{DataTemplate local:HomePage}"
+                Icon="home_icon.png" />
+            <ShellContent
+                Title="Progress"
+                ContentTemplate="{DataTemplate local:ProgressPage}"
+                Icon="progress_icon.png" />
+            <ShellContent
+                Title="Camera"
+                ContentTemplate="{DataTemplate local:CameraPage}"
+                Icon="camera_icon.png" />
+            <ShellContent
+                Title="Map"
+                ContentTemplate="{DataTemplate local:MapPage}"
+                Icon="map_icon.png" />
+            <ShellContent
+                Title="Rewards"
+                ContentTemplate="{DataTemplate local:RewardsPage}"
+                Icon="rewards_icon.png" />
+        </Tab>
+
+    </FlyoutItem>
+
+    <ShellContent
+        Title="Test"
+        ContentTemplate="{DataTemplate local:MapPage}"
+        Route="MainPage" />-->
+
+
+    <Shell.FlyoutHeader>
+        <Grid
+            Padding="10"
+            BackgroundColor="LightGray"
+            RowDefinitions="*,*">
+            <!--<ImageButton
+                HorizontalOptions="Start"
+                Source="camera_icon.png"
+                VerticalOptions="Center" />-->
+            <Label
+                Grid.Row="1"
+                FontSize="Large"
+                HorizontalOptions="Start"
+                IsVisible="True"
+                Text="Theme"
+                TextColor="Red"
+                VerticalOptions="Start" />
+            <Switch
+                x:Name="ThemeToggleSwitch"
+                Grid.Row="1"
+                HorizontalOptions="End"
+                Toggled="OnThemeToggled"
+                VerticalOptions="End" />
+            <Button
+                Grid.Row="0"
+                Command="{Binding LoginCommand}"
+                IsEnabled="True"
+                IsVisible="{Binding LoginButtonVisibility}"
+                Text="Login" />
+        </Grid>
+
+    </Shell.FlyoutHeader>
+    <!--<FlyoutItem Title="Profile" Icon="profile_icon.svg">
+        <ShellContent ContentTemplate="{DataTemplate local:ProfilePage}" />
+    </FlyoutItem>
+    <FlyoutItem Title="Settings" Icon="settings_icon.svg">
+        <ShellContent ContentTemplate="{DataTemplate local:SettingsPage}" />
+    </FlyoutItem>-->
+
+    <TabBar>
+        <ShellContent
+            Title="Camera"
+            ContentTemplate="{DataTemplate local:PoopCameraPage}"
+            Icon="camera_icon.png" />
+    </TabBar>
+</Shell>

@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="PoopDetector.LoginPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:skia="clr-namespace:SkiaSharp.Extended.UI.Controls;assembly=SkiaSharp.Extended.UI"
+    xmlns:viewmodel="clr-namespace:PoopDetector.ViewModel"
+    Title="LoginPage"
+    x:DataType="viewmodel:LoginViewModel">
+    <Grid RowDefinitions=".3*,.7*">
+
+        <!--<Image Aspect="AspectFill" Source="dotnet_bot.png" />-->
+        <Grid BackgroundColor="{StaticResource Primary}" Opacity="0.9" />
+
+        <Grid ColumnDefinitions="*">
+            <!--<Image
+                Aspect="AspectFit"
+                HeightRequest="120"
+                Source="smile.png" />-->
+            <skia:SKLottieView
+                Grid.Column="1"
+                HeightRequest="200"
+                RepeatCount="-1"
+                Source="initialanimation.json" />
+        </Grid>
+        <Grid Grid.Row="1">
+            <RoundRectangle
+                Margin="-5,-30,-5,-2"
+                CornerRadius="30,30,0,0"
+                Fill="White" />
+            <VerticalStackLayout Margin="30,0,30,0">
+                <Label
+                    FontAttributes="Bold"
+                    FontFamily="FontAwesome"
+                    FontSize="Medium"
+                    Text="Welcome!"
+                    TextColor="{StaticResource PrimaryDarkText}" />
+                <Label
+                    FontFamily="FontAwesome"
+                    Text="Log in to continue"
+                    TextColor="{StaticResource Secondary}" />
+                <Grid Margin="0,30,0,0" ColumnDefinitions=".2*,.8*">
+                    <RoundRectangle
+                        BackgroundColor="#EDEBF6"
+                        CornerRadius="10"
+                        HeightRequest="60"
+                        HorizontalOptions="Center"
+                        VerticalOptions="Center"
+                        WidthRequest="60" />
+                    <Image
+                        HeightRequest="35"
+                        HorizontalOptions="Center"
+                        Source="{StaticResource IconEnvelope}" />
+                    <Entry
+                        Grid.Column="1"
+                        Placeholder="EMAIL"
+                        Text="youremail@mailserver.com"
+                        TextColor="{StaticResource PrimaryDarkText}"
+                        VerticalOptions="Center" />
+                </Grid>
+                <Grid Margin="0,30,0,0" ColumnDefinitions=".2*,.8*">
+                    <RoundRectangle
+                        BackgroundColor="#EDEBF6"
+                        CornerRadius="10"
+                        HeightRequest="60"
+                        HorizontalOptions="Center"
+                        VerticalOptions="Center"
+                        WidthRequest="60" />
+                    <Image
+                        HeightRequest="44"
+                        HorizontalOptions="Center"
+                        Source="{StaticResource IconKey}" />
+                    <Entry
+                        Grid.Column="1"
+                        IsPassword="True"
+                        Placeholder="PASSWORD"
+                        Text="12345"
+                        TextColor="{StaticResource PrimaryDarkText}"
+                        VerticalOptions="Center" />
+                </Grid>
+                <Button
+                    Margin="0,20,0,0"
+                    BackgroundColor="{StaticResource Primary}"
+                    Command="{Binding LoginCommand}"
+                    HeightRequest="60"
+                    Text="Login"
+                    TextColor="{StaticResource Secondary}" />
+                <Label
+                    Margin="0,20,0,-10"
+                    HorizontalOptions="Center"
+                    Text="Forgot your password?"
+                    TextColor="{StaticResource Tertiary}"
+                    TextDecorations="Underline" />
+                <Button
+                    Margin="0,30,0,0"
+                    BackgroundColor="{StaticResource Secondary}"
+                    Command="{Binding NavigateToRegisterPageCommand}"
+                    HeightRequest="60"
+                    Text="Create your account"
+                    TextColor="{StaticResource Tertiary}" />
+            </VerticalStackLayout>
+        </Grid>
+    </Grid>
+</ContentPage>

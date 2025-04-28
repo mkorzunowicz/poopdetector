@@ -1,0 +1,11 @@
+<!-- gear_settings.svg -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+	<!-- outer cog -->
+	<g stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round">
+		<circle cx="12" cy="12" r="3.5"/>
+		<path d="M12 2v2.5M12 19.5V22
+             M4.22 4.22l1.77 1.77M17.99 18l1.77 1.77
+             M2 12h2.5M19.5 12H22
+             M4.22 19.78l1.77-1.77M18 6.01l1.77-1.77"/>
+	</g>
+</svg>

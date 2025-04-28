@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="PoopDetector.Views.PoopCameraPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:cv="clr-namespace:Camera.MAUI;assembly=Camera.MAUI"
+    xmlns:skia="clr-namespace:SkiaSharp.Views.Maui.Controls;assembly=SkiaSharp.Views.Maui.Controls"
+    xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+    xmlns:viewModels="clr-namespace:PoopDetector.ViewModel"
+    Background="Black"
+    Title="Poop Camera"
+    x:DataType="viewModels:PoopCameraViewModel">
+
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <toolkit:InvertedBoolConverter x:Key="InvertedBoolConverter"/>
+        </ResourceDictionary>
+    </ContentPage.Resources>
+
+    <Grid HorizontalOptions="Fill" VerticalOptions="Fill" RowDefinitions="*,80,40">
+        <!-- 
+            If no cameras are available, show a message. 
+            Otherwise, we show the rest of the camera UI.
+        -->
+        <Label
+            Grid.RowSpan="2"
+            HorizontalOptions="Center"
+            VerticalOptions="Center"
+            FontSize="Large"
+            Text="No cameras available!"
+            TextColor="Red"
+            IsVisible="{Binding NoCamerasAvailable}" />
+
+        <!-- The camera preview -->
+        <cv:CameraView
+            x:Name="cameraView"
+            Grid.Row="0"
+            Grid.RowSpan="2"
+            HorizontalOptions="Fill"
+            IsVisible="{Binding CameraIsVisible}"
+            TorchEnabled="{Binding TorchOn}"
+            VerticalOptions="Fill"/>
+
+        <Label
+            Margin="0,0,0,30"
+            FontSize="25"
+            HorizontalOptions="Center"
+            IsVisible="{Binding CloserIsVisible}"
+            Text="Closer"
+            VerticalOptions="End"/>
+        <Label
+            Margin="0,0,0,30"
+            FontSize="25"
+            HorizontalOptions="Center"
+            IsVisible="{Binding AwayIsVisible}"
+            Text="Further away"
+            VerticalOptions="End"/>
+
+        <skia:SKCanvasView
+            x:Name="canvasView"
+            Grid.RowSpan="2"
+            IsVisible="{Binding CameraIsVisible}"
+            PaintSurface="OnCanvasViewPaintSurface"/>
+
+        <Rectangle
+            BackgroundColor="Transparent"
+            HeightRequest="250"
+            RadiusX="30"
+            RadiusY="30"
+            Stroke="{StaticResource Primary}"
+            StrokeThickness="1"
+            HorizontalOptions="Center"
+            VerticalOptions="Center"
+            WidthRequest="250"/>
+
+        <!-- Transparent button to let user tap for focus anywhere inside that rectangle -->
+        <Button
+            BackgroundColor="Transparent"
+            Command="{Binding CameraFocusCommand}"
+            Opacity="0"
+            HeightRequest="250"
+            WidthRequest="250"
+            HorizontalOptions="Center"
+            VerticalOptions="Center" />
+
+        <!-- Torch Switch in the top-right corner -->
+        <Grid
+            Margin="0,250,20,0"
+            HorizontalOptions="End"
+            IsVisible="{Binding HasTorch}">
+            <Switch
+                HeightRequest="40"
+                WidthRequest="40"
+                IsEnabled="True"
+                IsToggled="{Binding TorchOn}"
+                Opacity="0"/>
+            <Rectangle
+                BackgroundColor="Transparent"
+                HeightRequest="45"
+                IsVisible="{Binding TorchOn}"
+                RadiusX="5"
+                RadiusY="5"
+                Stroke="{StaticResource Primary}"
+                StrokeThickness="1"
+                WidthRequest="45"/>
+            <Rectangle
+                BackgroundColor="Transparent"
+                HeightRequest="45"
+                IsVisible="{Binding TorchOn, Converter={StaticResource InvertedBoolConverter}}"
+                RadiusX="5"
+                RadiusY="5"
+                Stroke="{StaticResource White}"
+                StrokeThickness="1"
+                WidthRequest="45"/>
+            <Image
+                HeightRequest="40"
+                IsVisible="{Binding TorchOn}"
+                Source="flash_off.png"
+                WidthRequest="40"/>
+            <Image
+                HeightRequest="40"
+                IsVisible="{Binding TorchOn, Converter={StaticResource InvertedBoolConverter}}"
+                Source="flash_on.png"
+                WidthRequest="40"/>
+            <!--<Image
+                HeightRequest="40"
+                IsVisible="{Binding TorchOn}"
+                Source="icon_lightbulb_green.png"
+                WidthRequest="40"/>
+            <Image
+                HeightRequest="40"
+                IsVisible="{Binding TorchOn, Converter={StaticResource InvertedBoolConverter}}"
+                Source="icon_lightbulb.png"
+                WidthRequest="40"/>-->
+        </Grid>
+
+        <!-- The “frozen” image if the user paused or took a picture -->
+        <Image
+            x:Name="frozenImage"
+            Grid.RowSpan="2"
+            IsVisible="{Binding FrozenPictureIsVisible}"
+            Source="{Binding FrozenPictureImageSource}">
+
+        </Image>
+
+        <!-- maskCanvasView already exists; keep it -->
+        <skia:SKCanvasView x:Name="maskCanvasView"
+                   Grid.RowSpan="2"
+                   IsVisible="{Binding FrozenPictureIsVisible}"
+                   PaintSurface="OnMaskPaintSurface">
+
+            <skia:SKCanvasView.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnFrozenTapped"/>
+            </skia:SKCanvasView.GestureRecognizers>
+        </skia:SKCanvasView>
+
+        <!-- FPS label in top-left -->
+        <Label
+            x:Name="fpsText"
+            FontSize="Large"
+            HorizontalOptions="Start"
+            Margin="20,0,0,0"
+            IsVisible="True"
+            Text="{Binding FPS}"
+            TextColor="Red"
+            VerticalOptions="Start"/>
+
+        <!-- 
+            Bottom row with capture/cancel UI 
+        -->
+        <VerticalStackLayout Grid.Row="1">
+            
+
+            <Grid ColumnDefinitions="*,*,*">
+               
+                <Button
+                    BorderColor="LightGreen"
+                    BorderWidth="4"
+                    Grid.Column="1"
+                    Command="{Binding ForcePictureCommand}"
+                    HeightRequest="80"
+                    IsEnabled="True"
+                    BackgroundColor="{StaticResource Primary}"
+                    CornerRadius="100"
+                    
+                    IsVisible="{Binding CameraIsVisible}"
+                    WidthRequest="80">
+                </Button>
+                <ImageButton
+                    Grid.Column="2"
+                    Source="switch_camera_icon.png"
+                    Margin="10"
+                     WidthRequest="60"
+                     HeightRequest="60"
+                    CornerRadius="15"
+                    IsVisible="{Binding ShowSettings}"
+                    Clicked="OnSettingsClicked" />
+                
+                <ImageButton
+                    BackgroundColor="{StaticResource VeryDarkTransparentGreen}"
+                     Source="thumb_up_icon.png"
+                    IsVisible="{Binding FrozenPictureIsVisible}"
+                    Command="{Binding AcceptPictureCommand}"
+                    WidthRequest="80"
+                    IsEnabled="True"
+                    HorizontalOptions="Center"
+                    HeightRequest="80" >
+                    <ImageButton.Behaviors>
+                        <toolkit:IconTintColorBehavior TintColor="{StaticResource ThumbLightGreen}" />
+                    </ImageButton.Behaviors>
+                </ImageButton>
+
+                <ImageButton
+                    Grid.Column="1"
+                     Command="{Binding ClearSamPointsCommand}"
+                     Source="broom_icon.png"
+                     Margin="10"
+                 WidthRequest="60"
+                 HeightRequest="60"
+                     IsVisible="{Binding FrozenPictureIsVisible}" />
+
+                <ImageButton
+                    Grid.Column="2"
+                    BackgroundColor="{StaticResource VeryDarkTransparentGreen}"
+                  Source="thumb_down_icon.png"
+                 IsVisible="{Binding FrozenPictureIsVisible}"
+                 Command="{Binding CancelPictureCommand}"
+                 WidthRequest="80"
+                 IsEnabled="True"
+                 HorizontalOptions="Center"
+                    HeightRequest="80" >
+
+                    <ImageButton.Behaviors>
+                        <toolkit:IconTintColorBehavior TintColor="Red" />
+                    </ImageButton.Behaviors>
+                </ImageButton>
+
+            </Grid>
+        </VerticalStackLayout>
+    </Grid>
+</ContentPage>
