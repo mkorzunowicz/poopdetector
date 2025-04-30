@@ -1,78 +1,121 @@
-name: Build Android (APK) + Windows (.NET MAUI 9)
+name: Build (single-APK) + Windows and Release
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main, build-test ]   # keep your test branch
+    tags:     [ 'v*' ]               # build + create release on version tags
   pull_request:
-    branches: [main]
-  workflow_dispatch: # manual trigger
+    branches: [ main ]
+  workflow_dispatch:
 
-# ------------------------------------------------------------------
-# Shared settings
-# ------------------------------------------------------------------
+permissions:
+  contents: write                    # needed for release upload
+
 env:
-  PROJECT_PATH: "PoopDetector/PoopDetector.csproj" 
-  ANDROID_OUT: "${{ github.workspace }}/artifacts/android"
-  WINDOWS_OUT: "${{ github.workspace }}/artifacts/windows"
+  PROJECT_PATH: PoopDetector/PoopDetector.csproj
+  ANDROID_OUT: ${{ github.workspace }}/artifacts/android
+  WINDOWS_OUT: ${{ github.workspace }}/artifacts/windows
 
-# ------------------------------------------------------------------
-# Android job – produces an APK
-# ------------------------------------------------------------------
 jobs:
+#------------------------------------------------ Android
   android:
     runs-on: windows-latest
+    outputs:
+      apk: ${{ steps.pick.outputs.apk }}
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Set up .NET 9 SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "9.0.x"
+    - uses: actions/setup-dotnet@v4
+      with: { dotnet-version: 9.0.x }
 
-      - name: Install MAUI workload
-        run: |
-          dotnet workload install maui --skip-sign-check
-          dotnet workload restore
+    - name: Install MAUI workload
+      run: |
+        dotnet workload install maui --skip-sign-check
+        dotnet workload restore
 
-      - name: Restore NuGet packages
-        run: dotnet restore ${{ env.PROJECT_PATH }}
+    - run: dotnet restore $PROJECT_PATH
 
-      - name: Publish Android APK
-        run: dotnet publish ${{ env.PROJECT_PATH }} -c Release -f net9.0-android -p:RunAOTCompilation=false -p:AndroidPackageFormat=apk -o "${{ env.ANDROID_OUT }}"
+    - name: Publish APK (AOT off)
+      shell: bash
+      run: |
+        dotnet publish "$PROJECT_PATH" \
+          -c Release \
+          -f net9.0-android \
+          -p:AndroidPackageFormat=apk \
+          -p:RunAOTCompilation=false \
+          -o "$ANDROID_OUT"
 
-      - name: Upload Android artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-apk
-          path: ${{ env.ANDROID_OUT }}/*.apk
+    # ---- pick **one** APK and throw the rest away
+    - id: pick
+      shell: bash
+      run: |
+        # prefer signed; fall back to the first apk found
+        APK=$(ls "$ANDROID_OUT"/*Signed.apk 2>/dev/null || ls "$ANDROID_OUT"/*.apk | head -n 1)
+        echo "apk=$APK" >>"$GITHUB_OUTPUT"
+        # delete everything else so only one file is uploaded
+        find "$ANDROID_OUT" -name '*.apk' ! -path "$APK" -delete
 
-  # ------------------------------------------------------------------
-  # Windows job – produces an unpackaged EXE
-  # ------------------------------------------------------------------
+    - uses: actions/upload-artifact@v4
+      with:
+        name: android-apk
+        path: ${{ steps.pick.outputs.apk }}
+
+#------------------------------------------------ Windows
   windows:
     runs-on: windows-latest
+    outputs:
+      zip: ${{ steps.zip.outputs.zip }}
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
+    - uses: actions/setup-dotnet@v4
+      with: { dotnet-version: 9.0.x }
 
-      - name: Set up .NET 9 SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "9.0.x"
+    - name: Install MAUI workload
+      run: |
+        dotnet workload install maui --skip-sign-check
+        dotnet workload restore
+    - run: dotnet restore $PROJECT_PATH
 
-      - name: Install MAUI workload
-        run: |
-          dotnet workload install maui --skip-sign-check
-          dotnet workload restore
+    - name: Publish unpackaged Windows build
+      shell: bash
+      run: |
+        dotnet publish "$PROJECT_PATH" \
+          -c Release \
+          -f net9.0-windows10.0.19041.0 \
+          -p:WindowsPackageType=None \
+          -p:RuntimeIdentifierOverride=win10-x64 \
+          -p:WindowsAppSDKSelfContained=true \
+          -o "$WINDOWS_OUT"
 
-      - name: Restore NuGet packages
-        run: dotnet restore ${{ env.PROJECT_PATH }}
+    - name: Zip
+      id: zip
+      shell: bash
+      run: |
+        cd "$WINDOWS_OUT"
+        zip -r ../PoopDetector-win64.zip .
+        echo "zip=${WINDOWS_OUT%/*}/PoopDetector-win64.zip" >>"$GITHUB_OUTPUT"
 
-      - name: Publish Windows build (unpackaged)
-        run: dotnet publish ${{ env.PROJECT_PATH }} -c Release -f net9.0-windows10.0.19041.0 -p:WindowsPackageType=None -p:RuntimeIdentifierOverride=win10-x64 -p:WindowsAppSDKSelfContained=true -o "${{ env.WINDOWS_OUT }}"
-     
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-build
-          path: ${{ env.WINDOWS_OUT }}/**
+    - uses: actions/upload-artifact@v4
+      with:
+        name: windows-zip
+        path: ${{ steps.zip.outputs.zip }}
+
+#------------------------------------------------ Release
+  release:
+    needs: [ android, windows ]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/download-artifact@v4
+      with: { name: android-apk, path: . }
+
+    - uses: actions/download-artifact@v4
+      with: { name: windows-zip,  path: . }
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          *.apk
+          *.zip
+        generate_release_notes: true
