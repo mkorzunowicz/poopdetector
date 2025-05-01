@@ -1,32 +1,33 @@
-# .github/workflows/maui-build-and-release.yml
-name: Build (cached) + Release
-
+name: Build (cached) APK + Windows & Release
 on:
   push:
     branches: [ main, build-test ]
-    tags:     [ 'v*' ]          # create a release on v1.2.3 etc.
-  pull_request: { branches: [ main ] }
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
-permissions: { contents: write }        # needed for release upload
+permissions: { contents: write }
 
 env:
-  PROJECT: PoopDetector/PoopDetector.csproj
+  PROJECT_PATH: PoopDetector/PoopDetector.csproj
   OUT_ANDROID: ${{ github.workspace }}/artifacts/android
-  OUT_WIN:     ${{ github.workspace }}/artifacts/windows
-  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1  # small speed boost
+  OUT_WINDOWS: ${{ github.workspace }}/artifacts/windows
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
 
 jobs:
   build:
     runs-on: windows-latest
 
     steps:
-    # ── Checkout & SDK ────────────────────────────────────────────
+    # ───── git & SDK ───────────────────────────────────────────────
     - uses: actions/checkout@v4
-    - uses: actions/setup-dotnet@v4           # built-in NuGet cache&#8203;:contentReference[oaicite:5]{index=5}
-      with: { dotnet-version: 9.0.x, cache: true }
+    - uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+        cache: true                     # caches NuGet automatically :contentReference[oaicite:5]{index=5}
 
-    # ── Re-use MAUI packs across runs ────────────────────────────
+    # ───── restore workload cache ─────────────────────────────────
     - name: Restore MAUI workload cache
       uses: actions/cache@v4
       with:
@@ -34,55 +35,52 @@ jobs:
         path: |
           C:\Program Files\dotnet\packs
           C:\Program Files\dotnet\workloadmanifests
-          ~/.nuget/packages
+          ~/.nuget/packages          # tilde works in PowerShell
 
+    # ───── install only what’s missing ────────────────────────────
     - name: Install MAUI workload (skips if cached)
       run: |
         dotnet workload install maui --skip-sign-check
         dotnet workload restore
 
-    # ── Build Android (single signed APK) ────────────────────────
-    - name: Publish APK
+    # ───── Android build (APK) ────────────────────────────────────
+    - name: Publish APK (AOT off)
       shell: bash
       run: |
-        dotnet publish "$PROJECT" \
+        dotnet publish "$PROJECT_PATH" \
           -c Release -f net9.0-android \
           -p:AndroidPackageFormat=apk \
           -p:RunAOTCompilation=false \
           -o "$OUT_ANDROID"
-        # keep exactly one APK
-        APK=$(ls "$OUT_ANDROID"/*Signed.apk 2>/dev/null || ls "$OUT_ANDROID"/*.apk | head -n1)
-        mv "$APK" "$OUT_ANDROID/app.apk"
+        cp $(ls "$OUT_ANDROID"/*Signed.apk 2>/dev/null || ls "$OUT_ANDROID"/*.apk | head -n1) "$OUT_ANDROID/app.apk"
 
-    # ── Build Windows (zip the folder) ───────────────────────────
-    - name: Publish Windows
+    # ───── Windows build ──────────────────────────────────────────
+    - name: Publish unpackaged Windows build
       shell: bash
       run: |
-        dotnet publish "$PROJECT" \
+        dotnet publish "$PROJECT_PATH" \
           -c Release -f net9.0-windows10.0.19041.0 \
           -p:WindowsPackageType=None \
           -p:RuntimeIdentifierOverride=win10-x64 \
           -p:WindowsAppSDKSelfContained=true \
-          -o "$OUT_WIN"
-    - name: Zip Windows output
+          -o "$OUT_WINDOWS"
+    - name: Zip Windows folder
       shell: pwsh
-      run: Compress-Archive -Path "$env:OUT_WIN\*" -DestinationPath "$env:OUT_WIN\PoopDetector-win64.zip" -Force
+      run: |
+        Compress-Archive -Path "$env:OUT_WINDOWS\*" -DestinationPath "$env:OUT_WINDOWS\PoopDetector-win64.zip" -Force
 
-    # ── Optional: archive for the run log (helps debug) ──────────
+    # ───── Save artifacts ─────────────────────────────────────────
     - uses: actions/upload-artifact@v4
-      with:
-        name: built-artifacts
-        path: |
-          ${{ env.OUT_ANDROID }}/app.apk
-          ${{ env.OUT_WIN }}/PoopDetector-win64.zip
-        if-no-files-found: error          # fail fast if files missing&#8203;:contentReference[oaicite:6]{index=6}
+      with: { name: android-apk, path: ${{ env.OUT_ANDROID }}/app.apk }
+    - uses: actions/upload-artifact@v4
+      with: { name: windows-zip, path: ${{ env.OUT_WINDOWS }}/PoopDetector-win64.zip }
 
-    # ── Create / update GitHub Release (only on tags) ────────────
-    - name: Release
+    # ───── release on tag ─────────────────────────────────────────
+    - name: Release (only on tag)
       if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v2   # modern release action&#8203;:contentReference[oaicite:7]{index=7}
+      uses: softprops/action-gh-release@v2
       with:
         files: |
           ${{ env.OUT_ANDROID }}/app.apk
-          ${{ env.OUT_WIN }}/PoopDetector-win64.zip
+          ${{ env.OUT_WINDOWS }}/PoopDetector-win64.zip
         generate_release_notes: true
