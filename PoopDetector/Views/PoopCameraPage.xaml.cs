@@ -179,7 +179,7 @@ namespace PoopDetector.Views
                             continue;
                         }
 
-                        var stream = await cameraView.TakePhotoAsync(Camera.MAUI.ImageFormat.JPEG);
+                        var stream = cameraView.GetSnapShotStream(Camera.MAUI.ImageFormat.JPEG);
                         if (stream == null || !stream.CanRead)
                         {
                             await Task.Delay(100);

@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PoopDetector", "PoopDetecto
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PoopDetector.Common", "PoopDetector.Common\PoopDetector.Common.csproj", "{BF2F03D0-BC55-420E-9329-809EC1FD6123}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Camera.MAUI", "..\Camera.Maui\Camera.MAUI\Camera.MAUI.csproj", "{787902EB-E70C-E071-BFB9-C95A8D48AA6F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -23,6 +25,10 @@ Global
 		{BF2F03D0-BC55-420E-9329-809EC1FD6123}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BF2F03D0-BC55-420E-9329-809EC1FD6123}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BF2F03D0-BC55-420E-9329-809EC1FD6123}.Release|Any CPU.Build.0 = Release|Any CPU
+		{787902EB-E70C-E071-BFB9-C95A8D48AA6F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{787902EB-E70C-E071-BFB9-C95A8D48AA6F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{787902EB-E70C-E071-BFB9-C95A8D48AA6F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{787902EB-E70C-E071-BFB9-C95A8D48AA6F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
