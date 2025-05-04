@@ -53,7 +53,7 @@ namespace PoopDetector.Views
             var sx = enc.Width / frozenImage.Width;
             var sy = enc.Height / frozenImage.Height;
 
-            double  scale = Math.Max(sx, sy);
+            double scale = Math.Max(sx, sy);
             // TODO: fix the outside image frame click
             var x_enc = p.Value.X * scale;
             var y_enc = p.Value.Y * scale;
@@ -96,8 +96,49 @@ namespace PoopDetector.Views
 
             //Debug.WriteLine($"scale: ({sx}, {sy} ) cam: ({e.Info.Width},{e.Info.Height}) mask:({maskBmp.Width},{maskBmp.Height})");
             SKPaint fill = new SKPaint { IsStroke = false, Color = SKColors.Blue.WithAlpha(0x80) };
-            canvas.DrawBitmap(mask, 0, 0, fill);
+            try
+            {
+                // Still throws sometimes on Windows screen resize
+                canvas.DrawBitmap(mask, 0, 0, fill);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex.Message);
+            }
+
             canvas.Restore();
+
+            if (pr?.Polygons?.Count > 0)
+            {
+                // We need to scale the polygons back to the mask size, as we alerady scaled it to the image
+                float sx2 = (float)mask.Width / pr.OriginalWidth;
+                float sy2 = (float)mask.Height / pr.OriginalHeight;
+
+                using var polyStroke = new SKPaint
+                {
+                    Color = SKColors.Red,
+                    StrokeWidth = 2,
+                    Style = SKPaintStyle.Stroke,
+                    IsAntialias = true
+                };
+
+                using var polyFill = new SKPaint
+                {
+                    Color = SKColors.Blue.WithAlpha(80),   // translucent fill
+                    Style = SKPaintStyle.Fill,
+                    IsAntialias = true
+                };
+                //canvas.Scale(Math.Min(sx, sy));
+                foreach (var flat in pr?.Polygons)
+                {
+                    //var pth = BuildPath(flat, 0, 0, 1);
+                    var pth = BuildPath(flat, 0, 0, Math.Min(sx2, sy2));
+                    if (pth == null) continue;
+
+                    canvas.DrawPath(pth, polyFill);   // interior
+                    canvas.DrawPath(pth, polyStroke); // outline
+                }
+            }
 
             _viewModel.SamResultReady = false;
         }
@@ -324,7 +365,7 @@ namespace PoopDetector.Views
 
                         var textSize = 26;
 #if ANDROID
-                    textSize = 40;
+                        textSize = 40;
 #endif
                         var textPaint = new SKPaint
                         {
@@ -340,42 +381,53 @@ namespace PoopDetector.Views
                     }
                 }
 
-                // Draw polygons
-                if (predictionResult.Polygons != null && predictionResult.Polygons.Count > 0)
-                {
-                    var polyPaint = new SKPaint
-                    {
-                        Color = SKColors.Red,
-                        StrokeWidth = 2,
-                        Style = SKPaintStyle.Stroke,
-                        IsAntialias = true
-                    };
+                //if (predictionResult.Polygons?.Count > 0)
+                //{
+                //    using var polyStroke = new SKPaint
+                //    {
+                //        Color = SKColors.Red,
+                //        StrokeWidth = 2,
+                //        Style = SKPaintStyle.Stroke,
+                //        IsAntialias = true
+                //    };
 
-                    foreach (var polygon in predictionResult.Polygons)
-                    {
-                        if (polygon.Count < 3) continue;
-                        var path = new SKPath();
+                //    using var polyFill = new SKPaint
+                //    {
+                //        Color = SKColors.Blue.WithAlpha(80),   // translucent fill
+                //        Style = SKPaintStyle.Fill,
+                //        IsAntialias = true
+                //    };
 
-                        float firstX = offsetX + (polygon[0].x * scale);
-                        float firstY = offsetY + (polygon[0].y * scale);
-                        path.MoveTo(firstX, firstY);
+                //    foreach (var flat in predictionResult.Polygons)
+                //    {
+                //        var pth = BuildPath(flat, offsetX, offsetY, scale);
+                //        if (pth == null) continue;
 
-                        for (int i = 1; i < polygon.Count; i++)
-                        {
-                            float px = offsetX + (polygon[i].x * scale);
-                            float py = offsetY + (polygon[i].y * scale);
-                            path.LineTo(px, py);
-                        }
-                        path.Close();
-
-                        canvas.DrawPath(path, polyPaint);
-                    }
-                }
+                //        canvas.DrawPath(pth, polyFill);   // interior
+                //        canvas.DrawPath(pth, polyStroke); // outline
+                //    }
+                //}
             }
             catch (Exception ex)
             {
                 Debug.WriteLine(ex.Message);
             }
+        }
+        private static SKPath BuildPath(IReadOnlyList<int> flat,
+                                float offsetX, float offsetY, float scale)
+        {
+            if (flat.Count < 6 || flat.Count % 2 != 0) return null;   // need >=3 pts
+
+            var path = new SKPath();
+            path.MoveTo(offsetX + flat[0] * scale,
+                        offsetY + flat[1] * scale);
+
+            for (int i = 2; i < flat.Count; i += 2)
+                path.LineTo(offsetX + flat[i] * scale,
+                            offsetY + flat[i + 1] * scale);
+
+            path.Close();
+            return path;
         }
 
         private static string ColorToHex(System.Drawing.Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";

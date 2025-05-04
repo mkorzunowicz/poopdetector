@@ -32,6 +32,7 @@ public class PredictionResult
             PreviousPoints.Add(point);
             mask256 = VisionModelManager.Instance.MobileSam.DecodeWithPoints(PreviousPoints);
             MaskBitmaps = [mask256];
+            MaskToPolygon();
             return;
         }
         var enc = VisionModelManager.Instance.MobileSam.ImageProcessor
@@ -68,29 +69,32 @@ public class PredictionResult
         }
 
         MaskBitmaps = [mask256];
+        MaskToPolygon();
 
     }
-    //public string MaskToPolygon()
-    //{
-    //    var cocoSegs = Utils.MaskToCocoPolygons(MaskBitmaps[0],
-    //                                     OriginalWidth,
-    //                                     OriginalHeight);
+    public List<List<int>> Polygons { get; private set; }
+    public string MaskToPolygon()
+    {
+        var cocoSegs = MaskBitmaps.SelectMany(mb=> Utils.MaskToCocoPolygons(mb,
+                                         OriginalWidth,
+                                         OriginalHeight));
 
-    //    // store or serialise:
-    //    Polygons = cocoSegs
-    //        .Select(seg => seg
-    //            .Select((v, i) => i % 2 == 0 ? (int)v : (int)v)   // ints if you prefer
-    //            .ToList())
-    //        .ToList();
+        // store or serialise:
+        Polygons = cocoSegs
+            .Select(seg => seg
+                .Select((v, i) => i % 2 == 0 ? (int)v : (int)v)   // ints if you prefer
+                .ToList())
+            .ToList();        
 
-    //    var json = System.Text.Json.JsonSerializer.Serialize(
-    //          new { segmentation = cocoSegs });
-    //}
+        var json = System.Text.Json.JsonSerializer.Serialize(
+              new { segmentation = cocoSegs });
+        return json;
+    }
     private List<PointF> PreviousPoints { get; set; } = [];
     public byte[] InputImage { get; set; }
     //public MLImage InputImage { get; set; }
     public List<BoundingBox> BoundingBoxes = [];
-    public List<List<(int x, int y)>> Polygons { get; set; } = new();
+    //public List<List<(int x, int y)>> Polygons { get; set; } = new();
     public List<SKBitmap> MaskBitmaps { get; set; } = new();
     public int OriginalHeight { get; set; }
     public int OriginalWidth { get; set; }
@@ -166,6 +170,8 @@ public class PredictionResult
             //return areaRatio;
         }
     }
+
+
     public string BoundingBoxesToJson()
     {
         return $"[{string.Join(',', BoundingBoxes.Select(b => b.ToJson()))}]";
