@@ -5,6 +5,7 @@ using PoopDetector.AI.Vision;
 using Color = System.Drawing.Color;
 using Size = Microsoft.Maui.Graphics.Size;
 using PointF = Microsoft.Maui.Graphics.PointF;
+using System.Diagnostics;
 
 namespace PoopDetector.AI;
 
@@ -16,7 +17,9 @@ public class PredictionResult
 {
     public async Task RunSamEncode()
     {
+        var sw = Stopwatch.StartNew();
         await VisionModelManager.Instance.MobileSam.EncodeAsync(InputImage);
+        Debug.WriteLine($"Encode took {sw.ElapsedMilliseconds} ms");
     }
     public async void ClearSamPoints()
     {
@@ -25,14 +28,20 @@ public class PredictionResult
     }
     public async Task RunSamDecode(PointF point = default)
     {
+        var sw = Stopwatch.StartNew();
         if (!VisionModelManager.Instance.MobileSam.CanDecode) return;
         SKBitmap mask256;
         if (!point.IsEmpty)
         {
             PreviousPoints.Add(point);
             mask256 = VisionModelManager.Instance.MobileSam.DecodeWithPoints(PreviousPoints);
+            Debug.WriteLine($"Decode took {sw.ElapsedMilliseconds} ms");
+            sw.Restart();
+
             MaskBitmaps = [mask256];
             MaskToPolygon();
+
+            Debug.WriteLine($"Mask to polygons took {sw.ElapsedMilliseconds} ms");
             return;
         }
         var enc = VisionModelManager.Instance.MobileSam.ImageProcessor
@@ -59,6 +68,7 @@ public class PredictionResult
             // Therefore we go for a point in the middle of the box
             PreviousPoints = new List<PointF> { new((float)xmid, (float)ymid) };
             mask256 = VisionModelManager.Instance.MobileSam.DecodeWithPoints(PreviousPoints);
+            Debug.WriteLine($"Decode took {sw.ElapsedMilliseconds} ms");
         }
         else
         {
@@ -66,10 +76,13 @@ public class PredictionResult
             PreviousPoints = new List<PointF> { new((float)enc.Width / 2f, (float)enc.Height / 2f) };
             //var centre = new List<PointF> { new(OriginalWidth / 2f, OriginalHeight / 2f) };
             mask256 = VisionModelManager.Instance.MobileSam.DecodeWithPoints(PreviousPoints);
+            Debug.WriteLine($"Decode took {sw.ElapsedMilliseconds} ms");
         }
-
         MaskBitmaps = [mask256];
+
+        sw.Restart();
         MaskToPolygon();
+        Debug.WriteLine($"Mask to polygons took {sw.ElapsedMilliseconds} ms");
 
     }
     public List<List<int>> Polygons { get; private set; }

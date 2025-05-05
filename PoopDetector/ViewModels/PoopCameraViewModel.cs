@@ -22,6 +22,9 @@ namespace PoopDetector.ViewModel
         private readonly CameraView cameraView;
         [ObservableProperty]
         private bool samResultReady;
+
+        [ObservableProperty]
+        private bool samRunning;
         public bool HasTorch => _selectedCamera != null && _selectedCamera.HasFlashUnit;
 
         [ObservableProperty]
@@ -86,9 +89,12 @@ namespace PoopDetector.ViewModel
             //{
             //    //return await _poopPictureService.PreparePicture(CurrentPrediction);
             //});
+            SamRunning = true;
             await CurrentPrediction.RunSamEncode();
             await CurrentPrediction.RunSamDecode();
+
             SamResultReady = true;
+            SamRunning =  false;
         }
 
         [RelayCommand]

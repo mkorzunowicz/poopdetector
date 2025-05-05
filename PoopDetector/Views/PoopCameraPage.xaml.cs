@@ -43,7 +43,7 @@ namespace PoopDetector.Views
         // handle taps on the frozen picture
         private async void OnFrozenTapped(object sender, TappedEventArgs e)
         {
-            if (_viewModel.CurrentPrediction == null) return;
+            if (_viewModel.CurrentPrediction == null || _viewModel.SamRunning) return;
 
             // position inside the image control
             var p = e.GetPosition(frozenImage);
@@ -80,13 +80,13 @@ namespace PoopDetector.Views
             }
 
             var mask = pr.MaskBitmaps[0];
-            //Debug.WriteLine("masks: " + pr.MaskBitmaps.Count);
-            if (mask.IsEmpty) return;
-            if (mask.IsNull) return;
-            if (!mask.ReadyToDraw) return;
+            ////Debug.WriteLine("masks: " + pr.MaskBitmaps.Count);
+            //if (mask.IsEmpty) return;
+            //if (mask.IsNull) return;
+            //if (!mask.ReadyToDraw) return;
 
             float scaleImg = Math.Min(
-                e.Info.Width / (float)pr.OriginalWidth,
+            e.Info.Width / (float)pr.OriginalWidth,
                 e.Info.Height / (float)pr.OriginalHeight);
             float offX = (e.Info.Width - pr.OriginalWidth * scaleImg) / 2f;
             float offY = (e.Info.Height - pr.OriginalHeight * scaleImg) / 2f;
@@ -97,19 +97,19 @@ namespace PoopDetector.Views
             float sy = (float)e.Info.Height / mask.Height;
             canvas.Scale(Math.Min(sx, sy));
 
-            //Debug.WriteLine($"scale: ({sx}, {sy} ) cam: ({e.Info.Width},{e.Info.Height}) mask:({maskBmp.Width},{maskBmp.Height})");
-            SKPaint fill = new SKPaint { IsStroke = false, Color = SKColors.Blue.WithAlpha(0x80) };
-            try
-            {
-                // Still throws sometimes on Windows screen resize
-                canvas.DrawBitmap(mask, 0, 0, fill);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(ex.Message);
-            }
+            ////Debug.WriteLine($"scale: ({sx}, {sy} ) cam: ({e.Info.Width},{e.Info.Height}) mask:({maskBmp.Width},{maskBmp.Height})");
+            //SKPaint fill = new SKPaint { IsStroke = false, Color = SKColors.Blue.WithAlpha(0x80) };
+            //try
+            //{
+            //    // Still throws sometimes on Windows screen resize
+            //    canvas.DrawBitmap(mask, 0, 0, fill);
+            //}
+            //catch (Exception ex)
+            //{
+            //    Debug.WriteLine(ex.Message);
+            //}
 
-            canvas.Restore();
+            //canvas.Restore();
 
             if (pr?.Polygons?.Count > 0)
             {
@@ -372,10 +372,7 @@ namespace PoopDetector.Views
                             IsStroke = true
                         };
 
-                        var textSize = 26;
-#if ANDROID
-                        textSize = 40;
-#endif
+                        var textSize = 20;
                         var textPaint = new SKPaint
                         {
                             Color = SKColor.Parse(ColorToHex(box.BoxColor)),

@@ -237,5 +237,6 @@
 
             </Grid>
         </VerticalStackLayout>
+        <ActivityIndicator Background="#A6000000" HorizontalOptions="Fill" VerticalOptions="Fill"  Color="Aqua" IsRunning="True" IsVisible="{Binding SamRunning}"></ActivityIndicator>
     </Grid>
 </ContentPage>

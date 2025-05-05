@@ -30,7 +30,7 @@
 
 		<!-- App Identifier -->
 		<ApplicationId>com.poop.detector</ApplicationId>
- 	  <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+		<!--<WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>-->
 		<!-- Versions -->
 		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
 		<ApplicationVersion>1</ApplicationVersion>
@@ -45,15 +45,15 @@
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net8.0-android|AnyCPU'">
-	  <AndroidPackageFormat>aab</AndroidPackageFormat>
-	  <AndroidUseAapt2>True</AndroidUseAapt2>
-	  <AndroidCreatePackagePerAbi>False</AndroidCreatePackagePerAbi>
+		<AndroidPackageFormat>apk</AndroidPackageFormat>
+		<AndroidUseAapt2>True</AndroidUseAapt2>
+		<AndroidCreatePackagePerAbi>False</AndroidCreatePackagePerAbi>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net8.0-android|ARM64'">
-	  <AndroidPackageFormat>aab</AndroidPackageFormat>
-	  <AndroidUseAapt2>True</AndroidUseAapt2>
-	  <AndroidCreatePackagePerAbi>False</AndroidCreatePackagePerAbi>
+		<AndroidPackageFormat>apk</AndroidPackageFormat>
+		<AndroidUseAapt2>True</AndroidUseAapt2>
+		<AndroidCreatePackagePerAbi>False</AndroidCreatePackagePerAbi>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -74,27 +74,27 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <None Remove="appsettings.json" />
-	  <None Remove="Resources\Fonts\fa_solid.ttf" />
-	  <None Remove="Resources\Images\camera_icon.svg" />
-	  <None Remove="Resources\Images\distance_icon.svg" />
-	  <None Remove="Resources\Images\home_icon.svg" />
-	  <None Remove="Resources\Images\map_icon.svg" />
-	  <None Remove="Resources\Images\paw_icon.svg" />
-	  <None Remove="Resources\Images\poop_icon.svg" />
-	  <None Remove="Resources\Images\poop_icon_overlay.svg" />
-	  <None Remove="Resources\Images\progress_icon.svg" />
-	  <None Remove="Resources\Images\rewards_icon.svg" />
-	  <None Remove="Resources\Images\smile.png" />
-	  <None Remove="Resources\Raw\initialanimation.json" />
-	  <None Remove="Resources\Raw\yolox_nano.onnx" />
-	  <None Remove="Resources\Raw\yolox_nano_poop_cropped_only_best.onnx" />
+		<None Remove="appsettings.json" />
+		<None Remove="Resources\Fonts\fa_solid.ttf" />
+		<None Remove="Resources\Images\camera_icon.svg" />
+		<None Remove="Resources\Images\distance_icon.svg" />
+		<None Remove="Resources\Images\home_icon.svg" />
+		<None Remove="Resources\Images\map_icon.svg" />
+		<None Remove="Resources\Images\paw_icon.svg" />
+		<None Remove="Resources\Images\poop_icon.svg" />
+		<None Remove="Resources\Images\poop_icon_overlay.svg" />
+		<None Remove="Resources\Images\progress_icon.svg" />
+		<None Remove="Resources\Images\rewards_icon.svg" />
+		<None Remove="Resources\Images\smile.png" />
+		<None Remove="Resources\Raw\initialanimation.json" />
+		<None Remove="Resources\Raw\yolox_nano.onnx" />
+		<None Remove="Resources\Raw\yolox_nano_poop_cropped_only_best.onnx" />
 	</ItemGroup>
 
 	<ItemGroup>
-	  <EmbeddedResource Include="appsettings.json">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </EmbeddedResource>
+		<EmbeddedResource Include="appsettings.json">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</EmbeddedResource>
 	</ItemGroup>
 
 	<ItemGroup>
@@ -126,36 +126,36 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Compile Update="Views\PoopCameraPage.xaml.cs">
-	    <DependentUpon>PoopCameraPage.xaml</DependentUpon>
-	  </Compile>
-	  <Compile Update="Views\CameraPage.xaml.cs">
-	    <DependentUpon>CameraPage.xaml</DependentUpon>
-	  </Compile>
+		<Compile Update="Views\PoopCameraPage.xaml.cs">
+			<DependentUpon>PoopCameraPage.xaml</DependentUpon>
+		</Compile>
+		<Compile Update="Views\CameraPage.xaml.cs">
+			<DependentUpon>CameraPage.xaml</DependentUpon>
+		</Compile>
 	</ItemGroup>
 
 	<ItemGroup>
-	  <MauiXaml Update="Views\CameraSelectionPage.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </MauiXaml>
-	  <MauiXaml Update="Views\PoopCameraPage.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </MauiXaml>
-	  <MauiXaml Update="Views\CameraPage.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </MauiXaml>
-	  <MauiXaml Update="Views\LoginPage.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </MauiXaml>
-	  <MauiXaml Update="Views\ProfilePage.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </MauiXaml>
-	  <MauiXaml Update="Views\RegisterPage.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </MauiXaml>
-	  <MauiXaml Update="Views\SettingsPage.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </MauiXaml>
+		<MauiXaml Update="Views\CameraSelectionPage.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</MauiXaml>
+		<MauiXaml Update="Views\PoopCameraPage.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</MauiXaml>
+		<MauiXaml Update="Views\CameraPage.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</MauiXaml>
+		<MauiXaml Update="Views\LoginPage.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</MauiXaml>
+		<MauiXaml Update="Views\ProfilePage.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</MauiXaml>
+		<MauiXaml Update="Views\RegisterPage.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</MauiXaml>
+		<MauiXaml Update="Views\SettingsPage.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</MauiXaml>
 	</ItemGroup>
 
 </Project>
