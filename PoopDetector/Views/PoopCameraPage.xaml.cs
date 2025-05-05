@@ -33,7 +33,10 @@ namespace PoopDetector.Views
             {
                 if (e.PropertyName == nameof(PoopCameraViewModel.SamResultReady))
                     if (_viewModel.SamResultReady)
-                        maskCanvasView.InvalidateSurface();
+                    Dispatcher.DispatchAsync(async () =>
+                        {
+                            maskCanvasView.InvalidateSurface();
+                        });                        
             };
         }
 
@@ -180,7 +183,7 @@ namespace PoopDetector.Views
             _viewModel.Cameras.Clear();
             if (cameraView.Cameras.Count == 0)
             {
-                // no cameras => the “No cameras available” label will show from the VM
+                // no cameras => the ï¿½No cameras availableï¿½ label will show from the VM
                 return;
             }
 
@@ -200,6 +203,7 @@ namespace PoopDetector.Views
 
         private async void StartPredictionLoop()
         {
+            Debug.WriteLine("STart prediction loop.");
             await Task.Factory.StartNew(async () =>
             {
                 // Wait until the model is loaded and playing is true
@@ -221,6 +225,8 @@ namespace PoopDetector.Views
                         }
 
                         var stream = cameraView.GetSnapShotStream(Camera.MAUI.ImageFormat.JPEG);
+
+                        // var stream = await cameraView.TakePhotoAsync(Camera.MAUI.ImageFormat.JPEG);
                         if (stream == null || !stream.CanRead)
                         {
                             await Task.Delay(100);
@@ -247,7 +253,10 @@ namespace PoopDetector.Views
                         ////testing
 
                         await GetVisionPrediction(stream);
-                        canvasView.InvalidateSurface();
+                        await Dispatcher.DispatchAsync(async () =>
+                        {
+                            canvasView.InvalidateSurface();
+                        });
 
                         loopCount++;
                         if (loopStopwatch.ElapsedMilliseconds >= 1000)

@@ -19,7 +19,7 @@ public class DoubleVisionBase<TImageProcessor> : IVision where TImageProcessor :
     InferenceSession _session2;
     ExecutionProviders _curExecutionProvider;
 
-    public DoubleVisionBase(string name, string modelName, string name2, string model2Name )
+    public DoubleVisionBase(string name, string modelName, string name2, string model2Name)
     {
         _name = name;
         _modelName = modelName;
@@ -110,11 +110,11 @@ public class DoubleVisionBase<TImageProcessor> : IVision where TImageProcessor :
         _model2 = await Utils.LoadResource(_model2Name);
 
         //This should allow use of NNAPI, but this ends up running slower than expected. The model might need to be rebuilt with different configuration.
-        //if (DeviceInfo.Platform == DevicePlatform.Android)
-        //    NewSession(ExecutionProviders.NNAPI);
-        //else
-        NewSession(ExecutionProviders.CPU);
-        //_session = new InferenceSession(_model);  // CPU execution provider is always enabled
-        //_curExecutionProvider = ExecutionProviders.CPU;
+        if (DeviceInfo.Platform == DevicePlatform.iOS)
+            NewSession(ExecutionProviders.CPU);
+        else if (DeviceInfo.Platform == DevicePlatform.Android)
+            NewSession(ExecutionProviders.NNAPI);
+        else
+            NewSession(ExecutionProviders.CPU);
     }
 }

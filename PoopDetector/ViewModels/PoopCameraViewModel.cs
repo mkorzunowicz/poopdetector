@@ -8,7 +8,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using PoopDetector.Models;
 using System.Drawing;
-using PoopDetector.Common;
 
 namespace PoopDetector.ViewModel
 {

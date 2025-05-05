@@ -2,11 +2,11 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PoopDetector.AI;
+using PoopDetector.Models;
 using SignInMaui.MSALClient;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
-using PoopDetector.Common;
 
 namespace PoopDetector.ViewModel;
 
