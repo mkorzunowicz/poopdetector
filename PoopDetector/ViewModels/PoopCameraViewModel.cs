@@ -8,6 +8,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using PoopDetector.Models;
 using System.Drawing;
+using PoopDetector.AI.Vision;
 
 namespace PoopDetector.ViewModel
 {
@@ -33,10 +34,12 @@ namespace PoopDetector.ViewModel
         public PoopCameraViewModel(CameraView cameraView)
         {
             this.cameraView = cameraView;
+           _modelTypes =  new ObservableCollection<VisionModelManager.ModelTypes>(Enum.GetValues<VisionModelManager.ModelTypes>());
         }
 
 
         // Indicates user can open settings only if more than one camera is available
+        public bool ShowSelectModel => ModelTypes.Count > 1 && !FrozenPictureIsVisible;
         public bool ShowSettings => Cameras.Count > 1 && !FrozenPictureIsVisible;
 
         // If no cameras are available, show a “No cameras” UI
@@ -76,6 +79,7 @@ namespace PoopDetector.ViewModel
 
         private async void Freeze()
         {
+            if (VisionModelManager.Instance.MobileSam == null) return;
             PausePredictions = true;
 
             FrozenPictureIsVisible = true;
@@ -94,7 +98,7 @@ namespace PoopDetector.ViewModel
             await CurrentPrediction.RunSamDecode();
 
             SamResultReady = true;
-            SamRunning =  false;
+            SamRunning = false;
         }
 
         [RelayCommand]
@@ -124,7 +128,7 @@ namespace PoopDetector.ViewModel
             OnPropertyChanged(nameof(CameraIsVisible));
             OnPropertyChanged(nameof(FrozenPictureIsVisible));
             OnPropertyChanged(nameof(ShowSettings));
-            
+
         }
 
         public ImageSource FrozenPictureImageSource
@@ -175,13 +179,18 @@ namespace PoopDetector.ViewModel
 
         public void AddPredictionResult(PredictionResult result)
         {
-            if (LastPredictions.Count == 5) LastPredictions.RemoveAt(0);
+            int count = 5;
+#if IOS
+count = 15;
+#endif
+            if (LastPredictions.Count == count)
+                LastPredictions.RemoveAt(0);
             LastPredictions.Add(result);
             CurrentPrediction = result;
 
-            if (LastPredictions.All(p => p.IsGood))
+            if (LastPredictions.Count == count && LastPredictions.All(p => p.IsGood))
             {
-                Freeze();
+                // Freeze();
                 LastPredictions.Clear();
             }
             else
@@ -224,5 +233,33 @@ namespace PoopDetector.ViewModel
                 }
             }
         }
+
+        private async void ChangeModelAsync(VisionModelManager.ModelTypes type)
+        {
+            await VisionModelManager.Instance.ChangeModelAsync(type);
+        }
+        private ObservableCollection<VisionModelManager.ModelTypes> _modelTypes ;
+        public ObservableCollection<VisionModelManager.ModelTypes> ModelTypes => _modelTypes;
+
+        // [RelayCommand]
+        // async Task SelectModel()
+        // {
+        //     await Navigation.PushModalAsync(new CameraSelectionPage(_viewModel));
+        // }
+        private VisionModelManager.ModelTypes _selectedModelType;
+        public VisionModelManager.ModelTypes SelectedModelType
+        {
+            get => _selectedModelType;
+            set
+            {
+                if (_selectedModelType != value)
+                {
+                    _selectedModelType = value;
+                    OnPropertyChanged();
+                    ChangeModelAsync(value);
+                }
+            }
+        }
+
     }
 }

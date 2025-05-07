@@ -13,15 +13,18 @@ public class YoloXNanoPoop
     : VisionBase<YoloXNanoImageProcessor>
 {
     public const string Identifier = "YoloXNanoPoop";
-    public const string ModelFilename = "yolox_nano_poop_cropped_only_best.onnx";
+    public string ModelFilename = "yolox_nano_poop_cropped_only_best.onnx";
     public const int FeaturesPerBox = 5;
     float nms_threshold = 0.45f;
     float probabilityThreshold = 0.7f;
     List<GridCoordinateAndStride> gridCoords;
     public override Size InputSize => ImageProcessor.RequiredSize;
 
-    public YoloXNanoPoop()
-        : base(Identifier, ModelFilename) { }
+    public YoloXNanoPoop(string filename = "yolox_nano_poop_cropped_only_best.onnx")
+        : base(Identifier, filename)
+    {
+        if (!string.IsNullOrWhiteSpace(filename)) ModelFilename = filename;
+    }
 
     protected override async Task<ImageProcessingResult> OnProcessImageAsync(byte[] image)
     {

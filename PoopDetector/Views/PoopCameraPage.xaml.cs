@@ -97,21 +97,21 @@ namespace PoopDetector.Views
             float sy = (float)e.Info.Height / mask.Height;
             canvas.Scale(Math.Min(sx, sy));
 
-            ////Debug.WriteLine($"scale: ({sx}, {sy} ) cam: ({e.Info.Width},{e.Info.Height}) mask:({maskBmp.Width},{maskBmp.Height})");
-            //SKPaint fill = new SKPaint { IsStroke = false, Color = SKColors.Blue.WithAlpha(0x80) };
-            //try
-            //{
-            //    // Still throws sometimes on Windows screen resize
-            //    canvas.DrawBitmap(mask, 0, 0, fill);
-            //}
-            //catch (Exception ex)
-            //{
-            //    Debug.WriteLine(ex.Message);
-            //}
+            //Debug.WriteLine($"scale: ({sx}, {sy} ) cam: ({e.Info.Width},{e.Info.Height}) mask:({maskBmp.Width},{maskBmp.Height})");
+            SKPaint fill = new SKPaint { IsStroke = false, Color = SKColors.Blue.WithAlpha(0x80) };
+            try
+            {
+               // Still throws sometimes on Windows screen resize
+               canvas.DrawBitmap(mask, 0, 0, fill);
+            }
+            catch (Exception ex)
+            {
+               Debug.WriteLine(ex.Message);
+            }
 
-            //canvas.Restore();
+            // canvas.Restore();
 
-            if (pr?.Polygons?.Count > 0)
+            if (false && pr?.Polygons?.Count > 0)
             {
                 // We need to scale the polygons back to the mask size, as we alerady scaled it to the image
                 float sx2 = (float)mask.Width / pr.OriginalWidth;
@@ -287,11 +287,8 @@ namespace PoopDetector.Views
                 stream.Position = 0;
             }
 
-            var result = await VisionModelManager.Instance.PoopModel.ProcessImageAsync((stream as MemoryStream).ToArray());
-            var box = result.Boxes.FirstOrDefault();
+            var result = await VisionModelManager.Instance.CurrentModel.ProcessImageAsync((stream as MemoryStream).ToArray());
 
-            float scaleResizeX = (float)width / result.InputWidth;
-            float scaleResizeY = (float)height / result.InputHeight;
 
             var res = new PredictionResult
             {
@@ -439,11 +436,19 @@ namespace PoopDetector.Views
         private static string ColorToHex(System.Drawing.Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 
         // The gear icon (settings) was bound to this handler
-        private async void OnSettingsClicked(object sender, EventArgs e)
+        private async void OnSelectCameraClicked(object sender, EventArgs e)
         {
             // Show the modal that allows user to pick a camera
             // Passing our existing ViewModel so that the selection updates it directly
             await Navigation.PushModalAsync(new CameraSelectionPage(_viewModel));
+        }
+
+        // The gear icon (settings) was bound to this handler
+        private async void OnSelectModelClicked(object sender, EventArgs e)
+        {
+            // Show the modal that allows user to pick a camera
+            // Passing our existing ViewModel so that the selection updates it directly
+            await Navigation.PushModalAsync(new ModelSelectionPage(_viewModel));
         }
     }
 }

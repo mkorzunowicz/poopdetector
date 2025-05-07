@@ -14,15 +14,17 @@ public class YoloXNano
     : VisionBase<YoloXNanoImageProcessor>
 {
     public const string Identifier = "YoloXNano";
-    public const string ModelFilename = "yolox_nano.onnx";
+    public string ModelFilename = "yolox_nano.onnx";
     public const int FeaturesPerBox = 5;
     List<GridCoordinateAndStride> gridCoords;
     float nms_threshold = 0.45f;
     float probabilityThreshold = 0.7f;
     public override Size InputSize => ImageProcessor.RequiredSize;
-    public YoloXNano()
-        : base(Identifier, ModelFilename) { }
-
+    public YoloXNano(string filename = "yolox_nano.onnx")
+     : base(Identifier, filename)
+    {
+        if (!string.IsNullOrWhiteSpace(filename)) ModelFilename = filename;
+    }
     protected override async Task<ImageProcessingResult> OnProcessImageAsync(byte[] image)
     {
         var st = Stopwatch.StartNew();

@@ -171,7 +171,7 @@
         <VerticalStackLayout Grid.Row="1">
             
 
-            <Grid ColumnDefinitions="*,*,*">
+            <Grid ColumnDefinitions="*,*,*,*">
                
                 <Button
                     BorderColor="LightGreen"
@@ -194,7 +194,17 @@
                      HeightRequest="60"
                     CornerRadius="15"
                     IsVisible="{Binding ShowSettings}"
-                    Clicked="OnSettingsClicked" />
+                    Clicked="OnSelectCameraClicked" />
+                
+                <ImageButton
+                    Grid.Column="3"
+                    Source="gear_icon.png"
+                    Margin="10"
+                     WidthRequest="60"
+                     HeightRequest="60"
+                    CornerRadius="15"
+                    IsVisible="{Binding ShowSelectModel}"
+                    Clicked="OnSelectModelClicked" />
                 
                 <ImageButton
                     BackgroundColor="{StaticResource VeryDarkTransparentGreen}"
@@ -237,6 +247,9 @@
 
             </Grid>
         </VerticalStackLayout>
-        <ActivityIndicator Background="#A6000000" HorizontalOptions="Fill" VerticalOptions="Fill"  Color="Aqua" IsRunning="True" IsVisible="{Binding SamRunning}"></ActivityIndicator>
+        <Grid Background="#A6000000" HorizontalOptions="Fill" VerticalOptions="Fill" IsVisible="{Binding SamRunning}">
+        <ActivityIndicator  Color="Aqua" IsRunning="True" />
+
+        </Grid>
     </Grid>
 </ContentPage>
