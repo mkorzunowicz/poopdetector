@@ -34,7 +34,7 @@ namespace PoopDetector.AI.Vision.MobileSam
         // --------------------------------------------------------------------
         // internal state after EncodeAsync
         // --------------------------------------------------------------------
-        private float[]? _embedding;          // [1,256,64,64]
+        private float[] _embedding;          // [1,256,64,64]
         private Size _origSize;            // original camera frame
         private Size _encSize;             // (w_res,h_res) long-side-1024
 

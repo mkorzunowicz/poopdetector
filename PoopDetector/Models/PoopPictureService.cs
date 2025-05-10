@@ -72,22 +72,23 @@ namespace PoopDetector.Models
             catch (Exception ex)
             {
                 Debug.WriteLine(ex.Message);
-                throw ex;
+                // throw ex;
                 // Handle authentication errors here
             }
+            return null;
         }
-        public async Task SendPicture(PoopPicture picture)
-        {
-            try
-            {
-                // TODO: Send the picture somewhere, or save it to a file
-                Debug.WriteLine("Picture saved!");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(ex.Message);
-                throw ex;
-            }
-        }
+        // public async Task SendPicture(PoopPicture picture)
+        // {
+        //     try
+        //     {
+        //         // TODO: Send the picture somewhere, or save it to a file
+        //         Debug.WriteLine("Picture saved!");
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         Debug.WriteLine(ex.Message);
+        //         // throw ex;
+        //     }
+        // }
     }
 }

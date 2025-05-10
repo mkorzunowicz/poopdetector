@@ -213,9 +213,6 @@ namespace PoopDetector.AI.Vision.MobileSam
             try
             {
                 bmp.InstallPixels(bmp.Info, handle.AddrOfPinnedObject(), w);
-                //bmp.InstallPixels(new SKImageInfo(w, h, SKColorType.Gray8, SKAlphaType.Opaque),
-                //                  handle.AddrOfPinnedObject(),
-                //                  w);                       // rowBytes = w for Gray8
             }
             finally
             {

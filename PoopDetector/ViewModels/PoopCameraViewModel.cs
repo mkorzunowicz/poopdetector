@@ -19,7 +19,7 @@ namespace PoopDetector.ViewModel
         private CameraInfo _selectedCamera;
         private ObservableCollection<CameraInfo> _cameras = new();
 
-        private readonly PoopPictureService _poopPictureService;
+        // private readonly PoopPictureService _poopPictureService;
         private readonly CameraView cameraView;
         [ObservableProperty]
         private bool samResultReady;

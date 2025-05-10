@@ -10,7 +10,7 @@ namespace PoopDetector.AI.Vision.YoloX;
 
 // Reuse of the Ultraface code for YoloX implementation
 public class YoloXDoubleNanoPoop
-    : DoubleVisionBase<YoloXNanoImageProcessor>
+    : DoubleVisionBase<YoloXImageProcessor>
 {
     public const string Identifier = "YoloXNano";
     public const string ModelFilename = "yolox_nano.onnx";

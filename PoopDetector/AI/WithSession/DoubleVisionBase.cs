@@ -17,7 +17,6 @@ public class DoubleVisionBase<TImageProcessor> : IVision where TImageProcessor :
     TImageProcessor _imageProcessor;
     InferenceSession _session;
     InferenceSession _session2;
-    ExecutionProviders _curExecutionProvider;
 
     public DoubleVisionBase(string name, string modelName, string name2, string model2Name)
     {

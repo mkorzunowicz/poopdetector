@@ -5,8 +5,6 @@ namespace PoopDetector.AI.Vision
     public class VisionModelManager
     {
         private static readonly Lazy<VisionModelManager> _instance = new Lazy<VisionModelManager>(() => new VisionModelManager());
-        private IVision _poopModel;
-        private IVision _yoloModel;
         private MobileSam.MobileSam _samModel;
 
         public IVision CurrentModel => _model;
@@ -23,14 +21,17 @@ namespace PoopDetector.AI.Vision
         {
             _model = await Task.Run<IVision>(() =>
             {
+                var poopAndYolo = YoloXColormap.ColormapList.ToList();
+                poopAndYolo.AddRange(YoloXColormap.PoopList);
                 return type switch
                 {
-                    ModelTypes.YoloxNanoPoopCroppedOnlyBest => new YoloXNanoPoop(),
-                    ModelTypes.YoloxNanoPoopMixed => new YoloXNanoPoop("yolox_nano_poop_mixed.onnx"),
-                    ModelTypes.YoloxTinyPoop => new YoloXNano("yolox_tiny_poop.onnx"),
-                    ModelTypes.YoloxNano => new YoloXNano(),
-                    ModelTypes.YoloxSmall => new YoloX.YoloX(),
-                    _ => new YoloXNanoPoop(),
+                    ModelTypes.YoloxNanoPoopCroppedOnlyBest => new YoloX.YoloX("yolox_nano_poop_cropped_only_best.onnx", 416,416,YoloXColormap.PoopList),
+                    ModelTypes.YoloxNanoPoopMixed => new YoloX.YoloX("yolox_nano_poop_mixed.onnx",416,416,poopAndYolo),
+                    ModelTypes.YoloxTinyPoop => new YoloX.YoloX("yolox_tiny_poop.onnx",416,416,YoloXColormap.PoopList),
+                    ModelTypes.YoloxNano => new YoloX.YoloX("yolox_nano.onnx",416,416,YoloXColormap.ColormapList),
+                    // ModelTypes.YoloxSmal => new YoloX.YoloX("yolox_s_export_op11.onnx",416,416,YoloXColormap.PoopList),
+                    ModelTypes.YoloxSmall => new YoloX.YoloX("yolox_s_export_op11.onnx",640,640, YoloXColormap.ColormapList),
+                    _ => new YoloX.YoloX("yolox_s_export_op11.onnx",640,640, YoloXColormap.ColormapList),
                 };
             });
         }
@@ -41,16 +42,11 @@ namespace PoopDetector.AI.Vision
         // public bool IsLoaded { get { return _poopModel != null && _yoloModel != null; } }
         public static VisionModelManager Instance => _instance.Value;
 
-        public IVision PoopModel => _poopModel;
-        public IVision YoloModel => _yoloModel;
         public MobileSam.MobileSam MobileSam => _samModel;
         private void LoadModel()
         {
-            _model = new YoloXNanoPoop();
+            _model = new YoloX.YoloX("yolox_nano_poop_cropped_only_best.onnx", 416,416,YoloXColormap.PoopList);
 
-            //_poopModel = new YoloXDoubleNanoPoop();
-            // _poopModel = new YoloXNanoPoop();
-            // _yoloModel = new YoloXNano();
             _samModel = new MobileSam.MobileSam();
         }
         public async Task LoadModelAsync()

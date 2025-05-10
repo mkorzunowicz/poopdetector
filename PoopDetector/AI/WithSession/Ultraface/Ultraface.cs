@@ -42,7 +42,6 @@ public class Ultraface
                                     .ConfigureAwait(false);
 
         // Draw the bounding box for the best prediction on the image from the first resize. 
-        byte[] outputImage = default;
         //outputImage = await Task.Run(() => ImageProcessor.ApplyPredictionsToImage(predictions, sourceImage))
         //                            .ConfigureAwait(false);
         var boxes = predictions.Select(x => x.ToBoundingBox()).ToList();

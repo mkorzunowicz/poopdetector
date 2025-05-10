@@ -1,120 +1,94 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
-// Licensed under the MIT License.
-
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.ML.OnnxRuntime;
+﻿using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using PoopDetector.AI.Vision.Processing;
 
 namespace PoopDetector.AI.Vision.YoloX;
 
-// Reuse of the Ultraface code for YoloX implementation
-public class YoloX
-    : VisionBase<YoloXImageProcessor>
+/// <summary>
+///  A *single* YOLOX wrapper that can handle Nano, Tiny, Small …
+///  Pass (filename, width, height, numClasses) and you’re done.
+/// </summary>
+public class YoloX : VisionBase<YoloXImageProcessor>
 {
-    public const string Identifier = "YoloX";
-    public const string ModelFilename = "yolox_s_export_op11.onnx";
-    //public const string ModelFilename = "yolox-s-int8.onnx";
-    //public const string ModelFilename = "yolox_nano.onnx";
+    readonly int _width;
+    readonly int _height;
+    readonly List<(string, System.Drawing.Color)> _colormap;
+    readonly float _probThresh = 0.7f;
+    readonly float _nmsThresh  = 0.45f;
+    const    int   _featuresPerBox = 5;
 
-    public YoloX()
-        : base(Identifier, ModelFilename) { }
+    List<GridCoordinateAndStride> _grid;
 
-    protected override async Task<ImageProcessingResult> OnProcessImageAsync(byte[] image)
+    /// <summary>
+    ///  Create any YOLOX variant in one line.
+    /// </summary>
+    /// <param name="modelFile">ONNX file embedded as a resource.</param>
+    /// <param name="width">Model’s input width.</param>
+    /// <param name="height">Model’s input height.</param>
+    /// <param name="numClasses">Number of classes in the model output.</param>
+    public YoloX(string modelFile, int width, int height, List<(string, System.Drawing.Color)> colormap)
+        : base("YoloX", modelFile)
     {
-        // do initial resize maintaining the aspect ratio so the smallest size is 800. this is arbitrary and 
-        // chosen to be a good size to dispay to the user with the results
-        //using var sourceImage = await Task.Run(() => ImageProcessor.GetImageFromBytes(image, 800f))
-        //                                  .ConfigureAwait(false);
+        _width       = width;
+        _height      = height;
+        _colormap    = colormap;
 
-        // do the preprocessing to resize the image to the 320x240 with the model expects. 
-        // NOTE: this does not maintain the aspect ratio but works well enough with this particular model.
-        //       it may be better in other scenarios to resize and crop to convert the original image to a
-        //       320x240 image.
-        //using var preprocessedImage = await Task.Run(() => ImageProcessor.PreprocessSourceImage(image))
-        //                                        .ConfigureAwait(false);
-
-        //// Convert to Tensor of normalized float RGB data with NCHW ordering
-        //var tensor = await Task.Run(() => ImageProcessor.GetTensorForImage(preprocessedImage))
-        //                       .ConfigureAwait(false);
-
-        //// Run the model
-        //var predictions = await Task.Run(() => GetPredictions(tensor, preprocessedImage.Width, preprocessedImage.Height))
-        //                            .ConfigureAwait(false);
-
-        var st = Stopwatch.StartNew();
-
-        using var preprocessedImage = ImageProcessor.PreprocessSourceImage(image);
-
-        Debug.WriteLine($"preprocessedImage time: {st.ElapsedMilliseconds}ms");
-        st.Restart();
-        // Convert to Tensor of normalized float RGB data with NCHW ordering
-        var tensor = ImageProcessor.GetTensorForImage(preprocessedImage);
-
-        Debug.WriteLine($"tensor time: {st.ElapsedMilliseconds}ms");
-        st.Restart();
-        // Run the model
-        var predictions = GetPredictions(tensor, preprocessedImage.Width, preprocessedImage.Height);
-
-        Debug.WriteLine($"predictions time: {st.ElapsedMilliseconds}ms");
-        st.Stop();
-        // Draw the bounding box for the best prediction on the image from the first resize. 
-        //byte[] outputImage = default;
-        //outputImage = await Task.Run(() => ImageProcessor.ApplyPredictionsToImage(predictions, sourceImage))
-        //                            .ConfigureAwait(false);
-
-        return new ImageProcessingResult(image, null, boxes: predictions, preprocessedImage.Width, preprocessedImage.Height);
+        if (ImageProcessor is YoloXImageProcessor p)
+            p.Configure(width, height);
+        else
+            throw new InvalidOperationException("Unexpected processor type.");
     }
 
-    List<BoundingBox> GetPredictions(Tensor<float> input, int inputImageWidth, int inputImageHeight)
+    public override Size InputSize => new Size(_width, _height);
+
+    // -------------------------------------------------------------------- //
+    //                         inference pipeline                           //
+    // -------------------------------------------------------------------- //
+    protected override async Task<ImageProcessingResult> OnProcessImageAsync(byte[] image)
     {
+        using var pre = ImageProcessor.PreprocessSourceImage(image);
+        var tensor    = ImageProcessor.GetTensorForImage(pre);
+        var boxes     = GetPredictions(tensor, pre.Width, pre.Height);
 
-        var st = Stopwatch.StartNew();
-        // Setup inputs. Names used must match the input names in the model. 
-        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor("images", input) };
-        //var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor("YOLOX::input_0", input) };
+        return new ImageProcessingResult(image, null, boxes, pre.Width, pre.Height);
+    }
 
-        // Run inference
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results = Session.Run(inputs);
+    List<BoundingBox> GetPredictions(Tensor<float> input, int w, int h)
+    {
+        _grid ??= YOLOXUtility.GenerateGridCoordinatesWithStrides(
+                      YOLOXConstants.Strides, h, w);
 
-        Debug.WriteLine($"Prediction time: {st.ElapsedMilliseconds}ms");
-        st.Stop();
-        var resultsArray = results.ToArray();
-        float[] output = resultsArray[0].AsEnumerable<float>().ToArray();
-        float probabilityThreshold = 0.7f;
-        var gridCoords = YOLOXUtility.GenerateGridCoordinatesWithStrides(YOLOXConstants.Strides, inputImageHeight, inputImageWidth);
-        var boxesProposals = YOLOXUtility.GenerateBoundingBoxProposals(output, gridCoords, YoloXColormap.ColormapList.Count, FeaturesPerBox, probabilityThreshold);
-        float nms_threshold = 0.45f;
-        // Apply Non-Maximum Suppression (NMS) to the proposals
-        List<int> proposal_indices = BBox2DUtility.NMSSortedBoxes(boxesProposals, nms_threshold);
+        using var results = Session.Run(
+            new[] { NamedOnnxValue.CreateFromTensor("images", input) });
 
-        // Create an array of filtered boxes
-        var bboxes = proposal_indices.Select(index => boxesProposals[index]).ToArray();
+        float[] output = results.First().AsEnumerable<float>().ToArray();
 
-        var boxes = new List<BoundingBox>();
-        foreach (var box in bboxes)
+        var proposals = YOLOXUtility.GenerateBoundingBoxProposals(
+                            output, _grid, _colormap.Count,
+                            _featuresPerBox, _probThresh);
+
+        var best = BBox2DUtility.NMSSortedBoxesOptimized(proposals, _nmsThresh);
+
+        var list     = new List<BoundingBox>(best.Count);
+
+        foreach (var b in best)
         {
-            var colormap = YoloXColormap.ColormapList[box.index];
-            boxes.Add(new BoundingBox
+            var cmap = _colormap[b.index % _colormap.Count]; // wrap if needed
+            list.Add(new BoundingBox
             {
                 Dimensions = new BoundingBoxDimensions
                 {
-                    X = box.x0,
-                    Y = box.y0,
-                    Height = box.height,
-                    Width = box.width,
+                    X      = b.x0,
+                    Y      = b.y0,
+                    Width  = b.width,
+                    Height = b.height
                 },
-
-                Confidence = box.prob,
-                Label = colormap.Item1,
-                BoxColor = colormap.Item2
-
+                Confidence = b.prob,
+                Label      = cmap.Item1,
+                BoxColor   = cmap.Item2
             });
         }
-        return boxes;
+
+        return list;
     }
-    public const int FeaturesPerBox = 5;
 }
