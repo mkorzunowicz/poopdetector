@@ -17,6 +17,8 @@ public class PredictionResult
 {
     public async Task RunSamEncode()
     {
+        if (VisionModelManager.Instance.MobileSam == null) return;
+
         var sw = Stopwatch.StartNew();
         await VisionModelManager.Instance.MobileSam.EncodeAsync(InputImage);
         Debug.WriteLine($"Encode took {sw.ElapsedMilliseconds} ms");
@@ -28,6 +30,7 @@ public class PredictionResult
     }
     public async Task RunSamDecode(PointF point = default)
     {
+if (VisionModelManager.Instance.MobileSam == null) return;
         var sw = Stopwatch.StartNew();
         if (!VisionModelManager.Instance.MobileSam.CanDecode) return;
         SKBitmap mask256;
