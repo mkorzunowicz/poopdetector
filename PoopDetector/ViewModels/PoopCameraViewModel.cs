@@ -95,7 +95,7 @@ namespace PoopDetector.ViewModel
             //});
             SamRunning = true;
             await CurrentPrediction.RunSamEncode();
-            await CurrentPrediction.RunSamDecode();
+            CurrentPrediction.RunSamDecode();
 
             SamResultReady = true;
             SamRunning = false;

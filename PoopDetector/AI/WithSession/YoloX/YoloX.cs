@@ -14,8 +14,8 @@ public class YoloX : VisionBase<YoloXImageProcessor>
     readonly int _height;
     readonly List<(string, System.Drawing.Color)> _colormap;
     readonly float _probThresh = 0.7f;
-    readonly float _nmsThresh  = 0.45f;
-    const    int   _featuresPerBox = 5;
+    readonly float _nmsThresh = 0.45f;
+    const int _featuresPerBox = 5;
 
     List<GridCoordinateAndStride> _grid;
 
@@ -29,9 +29,9 @@ public class YoloX : VisionBase<YoloXImageProcessor>
     public YoloX(string modelFile, int width, int height, List<(string, System.Drawing.Color)> colormap)
         : base("YoloX", modelFile)
     {
-        _width       = width;
-        _height      = height;
-        _colormap    = colormap;
+        _width = width;
+        _height = height;
+        _colormap = colormap;
 
         if (ImageProcessor is YoloXImageProcessor p)
             p.Configure(width, height);
@@ -46,9 +46,10 @@ public class YoloX : VisionBase<YoloXImageProcessor>
     // -------------------------------------------------------------------- //
     protected override async Task<ImageProcessingResult> OnProcessImageAsync(byte[] image)
     {
+        // await InitializeAsync().ConfigureAwait(false);
         using var pre = ImageProcessor.PreprocessSourceImage(image);
-        var tensor    = ImageProcessor.GetTensorForImage(pre);
-        var boxes     = GetPredictions(tensor, pre.Width, pre.Height);
+        var tensor = ImageProcessor.GetTensorForImage(pre);
+        var boxes = GetPredictions(tensor, pre.Width, pre.Height);
 
         return new ImageProcessingResult(image, null, boxes, pre.Width, pre.Height);
     }
@@ -69,7 +70,7 @@ public class YoloX : VisionBase<YoloXImageProcessor>
 
         var best = BBox2DUtility.NMSSortedBoxesOptimized(proposals, _nmsThresh);
 
-        var list     = new List<BoundingBox>(best.Count);
+        var list = new List<BoundingBox>(best.Count);
 
         foreach (var b in best)
         {
@@ -78,14 +79,14 @@ public class YoloX : VisionBase<YoloXImageProcessor>
             {
                 Dimensions = new BoundingBoxDimensions
                 {
-                    X      = b.x0,
-                    Y      = b.y0,
-                    Width  = b.width,
+                    X = b.x0,
+                    Y = b.y0,
+                    Width = b.width,
                     Height = b.height
                 },
                 Confidence = b.prob,
-                Label      = cmap.Item1,
-                BoxColor   = cmap.Item2
+                Label = cmap.Item1,
+                BoxColor = cmap.Item2
             });
         }
 

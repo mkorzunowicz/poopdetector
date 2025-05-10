@@ -23,6 +23,7 @@ public class YoloXDoubleNanoPoop
 
     protected override async Task<ImageProcessingResult> OnProcessImageAsync(byte[] image)
     {
+        await InitializeAsync().ConfigureAwait(false);
         var st = Stopwatch.StartNew();
 
         using var preprocessedImage = ImageProcessor.PreprocessSourceImage(image);
@@ -46,7 +47,7 @@ public class YoloXDoubleNanoPoop
     float probabilityThreshold = 0.7f;
     float nms_threshold = 0.45f;
 
-    private List<BoundingBox> GetYoloxPrediction(InferenceSession session, List<NamedOnnxValue> inputs, List<(string, System.Drawing.Color)> colorMap )
+    private List<BoundingBox> GetYoloxPrediction(InferenceSession session, List<NamedOnnxValue> inputs, List<(string, System.Drawing.Color)> colorMap)
     {
         var st = Stopwatch.StartNew();
 

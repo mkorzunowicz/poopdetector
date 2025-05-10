@@ -33,7 +33,7 @@ namespace PoopDetector.Views
             {
                 if (e.PropertyName == nameof(PoopCameraViewModel.SamResultReady))
                     if (_viewModel.SamResultReady)
-                    Dispatcher.DispatchAsync(async () =>
+                    Dispatcher.DispatchAsync(async() =>
                         {
                             maskCanvasView.InvalidateSurface();
                         });                        
@@ -63,7 +63,7 @@ namespace PoopDetector.Views
 
             //Debug.WriteLine($"scale: ({sx}, {sy} ) cam: ({p.Value.X},{p.Value.Y}) mask:({frozenImage.Width},{frozenImage.Height})");
 
-            await _viewModel.CurrentPrediction.RunSamDecode(
+            _viewModel.CurrentPrediction.RunSamDecode(
                     new Microsoft.Maui.Graphics.PointF((float)x_enc, (float)y_enc));
 
             _viewModel.SamResultReady = true;          // trigger repaint
@@ -177,7 +177,7 @@ namespace PoopDetector.Views
             playing = false;
         }
 
-        private async void CameraView_CamerasLoaded(object sender, EventArgs e)
+        private void CameraView_CamerasLoaded(object sender, EventArgs e)
         {
             // Clear and re-populate the ViewModel's Cameras
             _viewModel.Cameras.Clear();

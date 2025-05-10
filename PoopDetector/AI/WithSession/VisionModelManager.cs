@@ -21,17 +21,17 @@ namespace PoopDetector.AI.Vision
         {
             _model = await Task.Run<IVision>(() =>
             {
-                var poopAndYolo = YoloXColormap.ColormapList.ToList();
-                poopAndYolo.AddRange(YoloXColormap.PoopList);
+                var poopAndYolo = YoloXColormap.PoopList.ToList();
+                poopAndYolo.AddRange(YoloXColormap.ColormapList);
                 return type switch
                 {
-                    ModelTypes.YoloxNanoPoopCroppedOnlyBest => new YoloX.YoloX("yolox_nano_poop_cropped_only_best.onnx", 416,416,YoloXColormap.PoopList),
-                    ModelTypes.YoloxNanoPoopMixed => new YoloX.YoloX("yolox_nano_poop_mixed.onnx",416,416,poopAndYolo),
-                    ModelTypes.YoloxTinyPoop => new YoloX.YoloX("yolox_tiny_poop.onnx",416,416,YoloXColormap.PoopList),
-                    ModelTypes.YoloxNano => new YoloX.YoloX("yolox_nano.onnx",416,416,YoloXColormap.ColormapList),
+                    ModelTypes.YoloxNanoPoopCroppedOnlyBest => new YoloX.YoloX("yolox_nano_poop_cropped_only_best.onnx", 416, 416, YoloXColormap.PoopList),
+                    ModelTypes.YoloxNanoPoopMixed => new YoloX.YoloX("yolox_nano_poop_mixed.onnx", 416, 416, poopAndYolo),
+                    ModelTypes.YoloxTinyPoop => new YoloX.YoloX("yolox_tiny_poop.onnx", 416, 416, YoloXColormap.PoopList),
+                    ModelTypes.YoloxNano => new YoloX.YoloX("yolox_nano.onnx", 416, 416, YoloXColormap.ColormapList),
                     // ModelTypes.YoloxSmal => new YoloX.YoloX("yolox_s_export_op11.onnx",416,416,YoloXColormap.PoopList),
-                    ModelTypes.YoloxSmall => new YoloX.YoloX("yolox_s_export_op11.onnx",640,640, YoloXColormap.ColormapList),
-                    _ => new YoloX.YoloX("yolox_s_export_op11.onnx",640,640, YoloXColormap.ColormapList),
+                    ModelTypes.YoloxSmall => new YoloX.YoloX("yolox_s_export_op11.onnx", 640, 640, YoloXColormap.ColormapList),
+                    _ => new YoloX.YoloX("yolox_s_export_op11.onnx", 640, 640, YoloXColormap.ColormapList),
                 };
             });
         }
@@ -45,7 +45,7 @@ namespace PoopDetector.AI.Vision
         public MobileSam.MobileSam MobileSam => _samModel;
         private void LoadModel()
         {
-            _model = new YoloX.YoloX("yolox_nano_poop_cropped_only_best.onnx", 416,416,YoloXColormap.PoopList);
+            _model = new YoloX.YoloX("yolox_nano_poop_cropped_only_best.onnx", 416, 416, YoloXColormap.PoopList);
 
             _samModel = new MobileSam.MobileSam();
         }

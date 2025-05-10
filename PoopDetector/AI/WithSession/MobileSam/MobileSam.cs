@@ -2,9 +2,7 @@
 //  MobileSam.cs
 // ------------------------------------------------------------
 
-using System.Diagnostics;
 using System.Drawing;
-using Microsoft.Maui.Graphics;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using PoopDetector.AI.Vision.Processing;
