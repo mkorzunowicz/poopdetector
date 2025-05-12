@@ -67,6 +67,7 @@ namespace PoopDetector.Views
                     new Microsoft.Maui.Graphics.PointF((float)x_enc, (float)y_enc));
 
             _viewModel.SamResultReady = true;          // trigger repaint
+
         }
         private void OnMaskPaintSurface(object sender, SKPaintSurfaceEventArgs e)
         {

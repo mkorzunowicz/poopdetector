@@ -198,7 +198,7 @@
                 
                 <ImageButton
                     Grid.Column="3"
-                    Source="gear_icon.png"
+                    Source="settings_icon.png"
                     Margin="10"
                      WidthRequest="60"
                      HeightRequest="60"

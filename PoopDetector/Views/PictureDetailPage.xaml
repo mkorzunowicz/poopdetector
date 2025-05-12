@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="PoopDetector.Views.PictureDetailPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    Title="Picture">
+
+    <Grid>
+        <Image x:Name="Image"
+               Aspect="AspectFit"/>
+        <Image x:Name="Mask"
+               Aspect="AspectFit"
+               Opacity="0.55"/>
+    </Grid>
+</ContentPage>

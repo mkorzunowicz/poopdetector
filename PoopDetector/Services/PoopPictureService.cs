@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace PoopDetector.Models
+namespace PoopDetector.Services
 {
     public enum SubmissionType { BeforeCleanup, AfterCleanup }
     public class PoopPicture

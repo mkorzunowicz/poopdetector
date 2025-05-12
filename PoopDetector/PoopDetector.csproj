@@ -138,6 +138,12 @@
 		<MauiXaml Update="Views\CameraSelectionPage.xaml">
 			<Generator>MSBuild:Compile</Generator>
 		</MauiXaml>
+		<MauiXaml Update="Views\PictureDetailPage.xaml">
+		  <Generator>MSBuild:Compile</Generator>
+		</MauiXaml>
+		<MauiXaml Update="Views\PictureGalleryPage.xaml">
+		  <Generator>MSBuild:Compile</Generator>
+		</MauiXaml>
 		<MauiXaml Update="Views\PoopCameraPage.xaml">
 			<Generator>MSBuild:Compile</Generator>
 		</MauiXaml>
