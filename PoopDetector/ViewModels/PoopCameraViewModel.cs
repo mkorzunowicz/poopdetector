@@ -88,6 +88,7 @@ public partial class PoopCameraViewModel : ObservableObject
             if (SetProperty(ref _selectedCamera, value))
             {
                 OnPropertyChanged(nameof(HasTorch));
+                OnPropertyChanged(nameof(ShowSettings));
                 SelectedCameraChanged?.Invoke(value);
             }
         }
@@ -154,6 +155,9 @@ public partial class PoopCameraViewModel : ObservableObject
             var maskBmp = CurrentPrediction.MaskBitmaps.First();
 
             await _storage.SaveAsync(imgBytes, maskBmp);
+
+            // tell the gallery to refresh
+            MessagingCenter.Send<object>(this, "PictureSaved");
         }
         catch (Exception ex)
         {

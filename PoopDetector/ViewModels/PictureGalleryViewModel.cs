@@ -1,6 +1,7 @@
-﻿// File: ViewModels/PictureGalleryViewModel.cs
+﻿// File: ViewModel/PictureGalleryViewModel.cs   (replaces old file)
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Maui.Controls;
 using PoopDetector.Models;
 using PoopDetector.Services;
 using System.Collections.ObjectModel;
@@ -16,7 +17,11 @@ public partial class PictureGalleryViewModel : ObservableObject
 
     public PictureGalleryViewModel()
     {
+        // initial load
         _ = LoadAsync();
+        //CommunityToolkit.Mvvm.Messaging.WeakReferenceMessenger.Default.
+        // listen for newly saved pictures
+        MessagingCenter.Subscribe<object>(this, "PictureSaved", async _ => await LoadAsync());
     }
 
     private async Task LoadAsync()
@@ -29,6 +34,5 @@ public partial class PictureGalleryViewModel : ObservableObject
         });
     }
 
-    [RelayCommand]
-    private async Task Refresh() => await LoadAsync();
+    [RelayCommand] private Task Refresh() => LoadAsync();
 }

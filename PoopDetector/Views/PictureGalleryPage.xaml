@@ -4,27 +4,38 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:viewModels="clr-namespace:PoopDetector.ViewModel"
+    xmlns:models="clr-namespace:PoopDetector.Models"
+    xmlns:conv="clr-namespace:PoopDetector.Converters"
     Title="Saved"
     x:DataType="viewModels:PictureGalleryViewModel">
+
+    <!-- resources -->
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <conv:FileImageConverter x:Key="FileImage"/>
+        </ResourceDictionary>
+    </ContentPage.Resources>
 
     <RefreshView Command="{Binding RefreshCommand}">
         <CollectionView
             ItemsSource="{Binding Pictures}"
             SelectionMode="Single"
             SelectionChanged="OnSelectionChanged">
+
             <CollectionView.ItemsLayout>
                 <GridItemsLayout Orientation="Vertical"
                                  Span="3"
                                  HorizontalItemSpacing="6"
-                                 VerticalItemSpacing="6"/>
+                                 VerticalItemSpacing="6" />
             </CollectionView.ItemsLayout>
 
+            <!-- correct binding context for the item -->
             <CollectionView.ItemTemplate>
-                <DataTemplate>
+                <DataTemplate x:DataType="models:SavedPoopPicture">
                     <Grid HeightRequest="120">
-                        <Image Source="{Binding ImagePath}"
+                        <Image Source="{Binding ImagePath, Converter={StaticResource FileImage}}"
                                Aspect="AspectFill"/>
-                        <Image Source="{Binding MaskPath}"
+                        <Image Source="{Binding MaskPath,  Converter={StaticResource FileImage}}"
                                Aspect="AspectFill"
                                Opacity="0.55"/>
                     </Grid>
