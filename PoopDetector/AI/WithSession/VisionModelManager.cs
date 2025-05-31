@@ -16,6 +16,7 @@ namespace PoopDetector.AI.Vision
             YoloxNanoPoopCroppedOnlyBest,
             YoloxNano,
             YoloxSmall,
+            Yolov9Poop
         }
         public async Task ChangeModelAsync(ModelTypes type)
         {
@@ -31,6 +32,8 @@ namespace PoopDetector.AI.Vision
                     ModelTypes.YoloxNano => new YoloX.YoloX("yolox_nano.onnx", 416, 416, YoloXColormap.ColormapList),
                     // ModelTypes.YoloxSmal => new YoloX.YoloX("yolox_s_export_op11.onnx",416,416,YoloXColormap.PoopList),
                     ModelTypes.YoloxSmall => new YoloX.YoloX("yolox_s_export_op11.onnx", 640, 640, YoloXColormap.ColormapList),
+                    ModelTypes.Yolov9Poop => new Yolov9.Yolov9("shitspotter.onnx",YoloXColormap.PoopList),
+
                     _ => new YoloX.YoloX("yolox_s_export_op11.onnx", 640, 640, YoloXColormap.ColormapList),
                 };
             });
