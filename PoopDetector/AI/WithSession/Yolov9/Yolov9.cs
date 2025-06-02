@@ -1,5 +1,7 @@
-// Copyright © 2025
-// MIT License – same as the rest of the project.
+// PoopDetector.AI.Vision.Yolov9/Yolov9.cs
+// --------------------------------------------------------------
+// Batch-safe decoder for shitspotter YOLO-v9 (DFL + objectness)
+// --------------------------------------------------------------
 
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
@@ -7,207 +9,150 @@ using PoopDetector.AI.Vision.Processing;
 
 namespace PoopDetector.AI.Vision.Yolov9;
 
-/// <summary>
-/// Stand-alone wrapper for the “shitspotter” YOLO-v9 ONNX export
-/// (one input, nine output tensors – DFL head + PGI head).
-/// Implements the same public surface as <see cref="YoloX.YoloX"/>.
-/// </summary>
 public sealed class Yolov9 : VisionBase<Yolov9ImageProcessor>
 {
-    // -----------------  fixed model constants  --------------------- //
-    const int IMG_W = 640;
-    const int IMG_H = 640;
-    const int REG_MAX = 16;                // DFL bins
-
-    // Only the *final* (PGI-B) head is used for inference
+    const int IMG_W = 640, IMG_H = 640, REG_MAX = 16;
     static readonly (string Reg, string Cls, string Obj)[] HEAD =
     {
-        ("2981", "2986", "2957"),  // 80×80  – stride 8
-        ("3028", "3033", "3004"),  // 40×40  – stride 16
-        ("3075", "3080", "3051"),  // 20×20  – stride 32
+        ("2981", "2986", "2957"), // 80×80 – stride 8
+        ("3028", "3033", "3004"), // 40×40 – stride 16
+        ("3075", "3080", "3051"), // 20×20 – stride 32
     };
     static readonly int[] STRIDES = { 8, 16, 32 };
 
-    // --------------------  user-tweakable  ------------------------- //
-    readonly List<(string Label, System.Drawing.Color Color)> _colormap;
-    readonly float _confThresh;
-    readonly float _nmsThresh;
+    readonly List<(string Label, System.Drawing.Color Color)> _cmap;
+    readonly float _confThr, _nmsThr;
+    readonly float[] _soft = new float[REG_MAX];
 
-    // Re-usable scratch buffers
-    readonly float[] _expectBuf = new float[REG_MAX];
-
-    public Yolov9(string onnxFile,
+    public Yolov9(string onnx,
                   List<(string, System.Drawing.Color)> colormap,
-                  float confThresh = 0.40f,
-                  float nmsThresh  = 0.45f)
-        : base("Yolov9", onnxFile)
+                  float confThr = .40f, float nmsThr = .45f)
+        : base("Yolov9", onnx)
     {
-        _colormap   = colormap ?? throw new ArgumentNullException(nameof(colormap));
-        _confThresh = confThresh;
-        _nmsThresh  = nmsThresh;
-
-        if (ImageProcessor is Yolov9ImageProcessor p)
-            p.Configure(IMG_W, IMG_H);
+        _cmap = colormap;
+        _confThr = confThr;
+        _nmsThr = nmsThr;
+        (ImageProcessor as Yolov9ImageProcessor)!.Configure(IMG_W, IMG_H);
     }
 
     public override Size InputSize => new Size(IMG_W, IMG_H);
 
-    // --------------------------  inference  ------------------------ //
-    protected override async Task<ImageProcessingResult> OnProcessImageAsync(byte[] image)
+    protected override async Task<ImageProcessingResult>
+        OnProcessImageAsync(byte[] img)
     {
-        using var pre   = ImageProcessor.PreprocessSourceImage(image);
-        var inputTensor = ImageProcessor.GetTensorForImage(pre);
+        using var pre = ImageProcessor.PreprocessSourceImage(img);
+        var inp = ImageProcessor.GetTensorForImage(pre);
 
-        var boxes = Decode(Session.Run(
-                               new[] { NamedOnnxValue.CreateFromTensor("input", inputTensor) }),
-                           pre.Width, pre.Height);
+        using var ortOut = Session.Run(
+            new[] { NamedOnnxValue.CreateFromTensor("input", inp) });
 
-        return new ImageProcessingResult(image, null, boxes,
+        var boxes = Decode(ortOut, pre.Width, pre.Height);
+        return new ImageProcessingResult(img, null, boxes,
                                          pre.Width, pre.Height);
     }
 
-    // -------------------  post-processing  ------------------------- //
-    List<BoundingBox> Decode(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> ortOut,
+    // ---------------------- decoder ------------------------------ //
+    List<BoundingBox> Decode(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> o,
                              int srcW, int srcH)
     {
-        var cand = new List<Candidate>(4096);
-        int C = _colormap.Count;
+        var cand = new List<Cand>(4096);
+        int C = _cmap.Count;
 
-        for (int scale = 0; scale < HEAD.Length; ++scale)
+        for (int s = 0; s < HEAD.Length; ++s)
         {
-            var reg = ortOut.First(o => o.Name == HEAD[scale].Reg).AsTensor<float>();
-            var cls = ortOut.First(o => o.Name == HEAD[scale].Cls).AsTensor<float>();
-            var obj = ortOut.First(o => o.Name == HEAD[scale].Obj).AsTensor<float>();
+            var reg = o.First(x => x.Name == HEAD[s].Reg).AsTensor<float>();
+            var cls = o.First(x => x.Name == HEAD[s].Cls).AsTensor<float>();
+            var obj = o.First(x => x.Name == HEAD[s].Obj).AsTensor<float>();
 
-            int S = STRIDES[scale];
-            int H = reg.Dimensions[2];
-            int W = reg.Dimensions[3];
+            int S = STRIDES[s];
+            int H = reg.Dimensions[3]; // note: dims = [N,16,4,H,W]
+            int W = reg.Dimensions[4];
 
             for (int y = 0; y < H; ++y)
-            for (int x = 0; x < W; ++x)
-            {
-                float objectness = Sigmoid(obj[0, y, x]);
-                if (objectness < 1e-4f) continue;
-
-                // ---- DFL expectation for all 4 sides ---- //
-                float l = Expect(reg, 0, y, x) * S;
-                float t = Expect(reg, 1, y, x) * S;
-                float r = Expect(reg, 2, y, x) * S;
-                float b = Expect(reg, 3, y, x) * S;
-
-                float cx = (x + 0.5f) * S;
-                float cy = (y + 0.5f) * S;
-
-                float x0 = MathF.Max(0, cx - l);
-                float y0 = MathF.Max(0, cy - t);
-                float x1 = MathF.Min(srcW - 1, cx + r);
-                float y1 = MathF.Min(srcH - 1, cy + b);
-
-                for (int c = 0; c < C; ++c)
+                for (int x = 0; x < W; ++x)
                 {
-                    float conf = objectness * Sigmoid(cls[c, y, x]);
-                    if (conf < _confThresh) continue;
+                    float pObj = Sigmoid(obj[0, 0, y, x]);
+                    if (pObj < 1e-4f) continue;
 
-                    cand.Add(new Candidate
+                    float l = Expect(reg, 0, y, x) * S;
+                    float t = Expect(reg, 1, y, x) * S;
+                    float r = Expect(reg, 2, y, x) * S;
+                    float b = Expect(reg, 3, y, x) * S;
+
+                    float cx = (x + .5f) * S, cy = (y + .5f) * S;
+                    float x0 = MathF.Max(0, cx - l), y0 = MathF.Max(0, cy - t);
+                    float x1 = MathF.Min(srcW - 1, cx + r), y1 = MathF.Min(srcH - 1, cy + b);
+
+                    for (int c = 0; c < C; ++c)
                     {
-                        x0 = x0, y0 = y0, x1 = x1, y1 = y1,
-                        score = conf,
-                        label = c
-                    });
+                        float conf = pObj * Sigmoid(cls[0, c, y, x]);
+                        if (conf < _confThr) continue;
+                        cand.Add(new Cand(x0, y0, x1, y1, conf, c));
+                    }
                 }
-            }
         }
 
-        var final = Nms(cand, _nmsThresh);
-
-        // ---- map to public BoundingBox ---- //
-        var list = new List<BoundingBox>(final.Count);
-        foreach (var b in final)
+        var fin = Nms(cand, _nmsThr);
+        var outL = new List<BoundingBox>(fin.Count);
+        foreach (var b in fin)
         {
-            var cmap = _colormap[b.label % _colormap.Count];
-            list.Add(new BoundingBox
+            var cm = _cmap[b.lbl % _cmap.Count];
+            outL.Add(new BoundingBox
             {
                 Dimensions = new BoundingBoxDimensions
                 {
-                    X      = b.x0,
-                    Y      = b.y0,
-                    Width  = b.x1 - b.x0,
+                    X = b.x0,
+                    Y = b.y0,
+                    Width = b.x1 - b.x0,
                     Height = b.y1 - b.y0
                 },
-                Confidence = b.score,
-                Label      = cmap.Item1,
-                BoxColor   = cmap.Item2
+                Confidence = b.sc,
+                Label = cm.Item1,
+                BoxColor = cm.Item2
             });
         }
-        return list;
+        return outL;
     }
 
-    // -----------------------  helpers  ----------------------------- //
     float Expect(Tensor<float> t, int side, int y, int x)
     {
-        int baseCh = 0;                       // 16 bins start at channel 0
-        for (int b = 0; b < REG_MAX; ++b)
-            _expectBuf[b] = t[baseCh + b, side, y, x];
+        for (int i = 0; i < REG_MAX; ++i)
+            _soft[i] = t[0, i, side, y, x]; // N,Bin,Side,H,W
 
-        SoftmaxInPlace(_expectBuf);
-        float exp = 0;
-        for (int b = 0; b < REG_MAX; ++b)
-            exp += _expectBuf[b] * b;
-        return exp;
+        Softmax(_soft); float e = 0;
+        for (int i = 0; i < REG_MAX; ++i) e += _soft[i] * i;
+        return e;
     }
 
-    static void SoftmaxInPlace(Span<float> v)
+    static void Softmax(Span<float> v)
     {
-        float max = v[0];
-        for (int i = 1; i < v.Length; ++i) max = MathF.Max(max, v[i]);
-
-        float sum = 0;
-        for (int i = 0; i < v.Length; ++i)
-        {
-            v[i] = MathF.Exp(v[i] - max);
-            sum += v[i];
-        }
-        for (int i = 0; i < v.Length; ++i) v[i] /= sum;
+        float m = v[0]; for (int i = 1; i < v.Length; ++i) m = MathF.Max(m, v[i]);
+        float s = 0; for (int i = 0; i < v.Length; ++i) { v[i] = MathF.Exp(v[i] - m); s += v[i]; }
+        for (int i = 0; i < v.Length; ++i) v[i] /= s;
     }
-
     static float Sigmoid(float x) => 1f / (1f + MathF.Exp(-x));
 
-    // ------------------  class-wise greedy NMS  -------------------- //
-    static List<Candidate> Nms(List<Candidate> boxes, float iouThr)
+    // -------------------- NMS + helpers -------------------------- //
+    static List<Cand> Nms(List<Cand> v, float thr)
     {
-        var sorted = boxes.OrderByDescending(b => b.score).ToList();
-        var keep   = new List<Candidate>();
-
-        foreach (var box in sorted)
+        var keep = new List<Cand>();
+        foreach (var b in v.OrderByDescending(z => z.sc))
         {
-            bool discard = keep.Any(k => k.label == box.label &&
-                                         IoU(k, box) > iouThr);
-            if (!discard) keep.Add(box);
+            if (keep.Any(k => k.lbl == b.lbl && IoU(k, b) > thr)) continue;
+            keep.Add(b);
         }
         return keep;
     }
-
-    static float IoU(Candidate a, Candidate b)
+    static float IoU(Cand a, Cand b)
     {
-        float ix0 = MathF.Max(a.x0, b.x0);
-        float iy0 = MathF.Max(a.y0, b.y0);
-        float ix1 = MathF.Min(a.x1, b.x1);
-        float iy1 = MathF.Min(a.y1, b.y1);
-
-        float iw = MathF.Max(0, ix1 - ix0);
-        float ih = MathF.Max(0, iy1 - iy0);
+        float ix0 = MathF.Max(a.x0, b.x0), iy0 = MathF.Max(a.y0, b.y0);
+        float ix1 = MathF.Min(a.x1, b.x1), iy1 = MathF.Min(a.y1, b.y1);
+        float iw = MathF.Max(0, ix1 - ix0), ih = MathF.Max(0, iy1 - iy0);
         float inter = iw * ih;
-
-        float areaA = (a.x1 - a.x0) * (a.y1 - a.y0);
-        float areaB = (b.x1 - b.x0) * (b.y1 - b.y0);
-
+        float areaA = (a.x1 - a.x0) * (a.y1 - a.y0),
+              areaB = (b.x1 - b.x0) * (b.y1 - b.y0);
         return inter / (areaA + areaB - inter + 1e-6f);
     }
-
-    struct Candidate
-    {
-        public float x0, y0, x1, y1;
-        public float score;
-        public int   label;
-    }
+    readonly record struct Cand(float x0, float y0, float x1, float y1,
+                                float sc, int lbl);
 }
