@@ -33,14 +33,17 @@ namespace PoopDetector.Views
             {
                 if (e.PropertyName == nameof(PoopCameraViewModel.SamResultReady))
                     if (_viewModel.SamResultReady)
-                        maskCanvasView.InvalidateSurface();
+                    Dispatcher.DispatchAsync(async() =>
+                        {
+                            maskCanvasView.InvalidateSurface();
+                        });                        
             };
         }
 
         // handle taps on the frozen picture
         private async void OnFrozenTapped(object sender, TappedEventArgs e)
         {
-            if (_viewModel.CurrentPrediction == null) return;
+            if (_viewModel.CurrentPrediction == null || _viewModel.SamRunning) return;
 
             // position inside the image control
             var p = e.GetPosition(frozenImage);
@@ -60,10 +63,11 @@ namespace PoopDetector.Views
 
             //Debug.WriteLine($"scale: ({sx}, {sy} ) cam: ({p.Value.X},{p.Value.Y}) mask:({frozenImage.Width},{frozenImage.Height})");
 
-            await _viewModel.CurrentPrediction.RunSamDecode(
+            _viewModel.CurrentPrediction.RunSamDecode(
                     new Microsoft.Maui.Graphics.PointF((float)x_enc, (float)y_enc));
 
             _viewModel.SamResultReady = true;          // trigger repaint
+
         }
         private void OnMaskPaintSurface(object sender, SKPaintSurfaceEventArgs e)
         {
@@ -77,13 +81,13 @@ namespace PoopDetector.Views
             }
 
             var mask = pr.MaskBitmaps[0];
-            //Debug.WriteLine("masks: " + pr.MaskBitmaps.Count);
-            if (mask.IsEmpty) return;
-            if (mask.IsNull) return;
-            if (!mask.ReadyToDraw) return;
+            ////Debug.WriteLine("masks: " + pr.MaskBitmaps.Count);
+            //if (mask.IsEmpty) return;
+            //if (mask.IsNull) return;
+            //if (!mask.ReadyToDraw) return;
 
             float scaleImg = Math.Min(
-                e.Info.Width / (float)pr.OriginalWidth,
+            e.Info.Width / (float)pr.OriginalWidth,
                 e.Info.Height / (float)pr.OriginalHeight);
             float offX = (e.Info.Width - pr.OriginalWidth * scaleImg) / 2f;
             float offY = (e.Info.Height - pr.OriginalHeight * scaleImg) / 2f;
@@ -98,17 +102,17 @@ namespace PoopDetector.Views
             SKPaint fill = new SKPaint { IsStroke = false, Color = SKColors.Blue.WithAlpha(0x80) };
             try
             {
-                // Still throws sometimes on Windows screen resize
-                canvas.DrawBitmap(mask, 0, 0, fill);
+               // Still throws sometimes on Windows screen resize
+               canvas.DrawBitmap(mask, 0, 0, fill);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine(ex.Message);
+               Debug.WriteLine(ex.Message);
             }
 
-            canvas.Restore();
+            // canvas.Restore();
 
-            if (pr?.Polygons?.Count > 0)
+            if (false && pr?.Polygons?.Count > 0)
             {
                 // We need to scale the polygons back to the mask size, as we alerady scaled it to the image
                 float sx2 = (float)mask.Width / pr.OriginalWidth;
@@ -174,13 +178,13 @@ namespace PoopDetector.Views
             playing = false;
         }
 
-        private async void CameraView_CamerasLoaded(object sender, EventArgs e)
+        private void CameraView_CamerasLoaded(object sender, EventArgs e)
         {
             // Clear and re-populate the ViewModel's Cameras
             _viewModel.Cameras.Clear();
             if (cameraView.Cameras.Count == 0)
             {
-                // no cameras => the “No cameras available” label will show from the VM
+                // no cameras => the ï¿½No cameras availableï¿½ label will show from the VM
                 return;
             }
 
@@ -200,10 +204,11 @@ namespace PoopDetector.Views
 
         private async void StartPredictionLoop()
         {
+            Debug.WriteLine("STart prediction loop.");
             await Task.Factory.StartNew(async () =>
             {
                 // Wait until the model is loaded and playing is true
-                while (!playing || !VisionModelManager.Instance.IsLoaded)
+                while (!playing || VisionModelManager.Instance.IsDownloading || VisionModelManager.Instance.CurrentModel == null)
                 {
                     await Task.Delay(10);
                 }
@@ -221,6 +226,8 @@ namespace PoopDetector.Views
                         }
 
                         var stream = cameraView.GetSnapShotStream(Camera.MAUI.ImageFormat.JPEG);
+
+                        // var stream = await cameraView.TakePhotoAsync(Camera.MAUI.ImageFormat.JPEG);
                         if (stream == null || !stream.CanRead)
                         {
                             await Task.Delay(100);
@@ -247,7 +254,10 @@ namespace PoopDetector.Views
                         ////testing
 
                         await GetVisionPrediction(stream);
-                        canvasView.InvalidateSurface();
+                        await Dispatcher.DispatchAsync(async () =>
+                        {
+                            canvasView.InvalidateSurface();
+                        });
 
                         loopCount++;
                         if (loopStopwatch.ElapsedMilliseconds >= 1000)
@@ -278,11 +288,8 @@ namespace PoopDetector.Views
                 stream.Position = 0;
             }
 
-            var result = await VisionModelManager.Instance.PoopModel.ProcessImageAsync((stream as MemoryStream).ToArray());
-            var box = result.Boxes.FirstOrDefault();
+            var result = await VisionModelManager.Instance.CurrentModel.ProcessImageAsync((stream as MemoryStream).ToArray());
 
-            float scaleResizeX = (float)width / result.InputWidth;
-            float scaleResizeY = (float)height / result.InputHeight;
 
             var res = new PredictionResult
             {
@@ -363,10 +370,7 @@ namespace PoopDetector.Views
                             IsStroke = true
                         };
 
-                        var textSize = 26;
-#if ANDROID
-                        textSize = 40;
-#endif
+                        var textSize = 20;
                         var textPaint = new SKPaint
                         {
                             Color = SKColor.Parse(ColorToHex(box.BoxColor)),
@@ -433,11 +437,19 @@ namespace PoopDetector.Views
         private static string ColorToHex(System.Drawing.Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 
         // The gear icon (settings) was bound to this handler
-        private async void OnSettingsClicked(object sender, EventArgs e)
+        private async void OnSelectCameraClicked(object sender, EventArgs e)
         {
             // Show the modal that allows user to pick a camera
             // Passing our existing ViewModel so that the selection updates it directly
             await Navigation.PushModalAsync(new CameraSelectionPage(_viewModel));
+        }
+
+        // The gear icon (settings) was bound to this handler
+        private async void OnSelectModelClicked(object sender, EventArgs e)
+        {
+            // Show the modal that allows user to pick a camera
+            // Passing our existing ViewModel so that the selection updates it directly
+            await Navigation.PushModalAsync(new ModelSelectionPage());
         }
     }
 }

@@ -7,29 +7,39 @@
    xmlns:camera="clr-namespace:Camera.MAUI;assembly=Camera.MAUI"  
    Title="Select a Camera"  
    x:DataType="viewModels:PoopCameraViewModel" 
-    BackgroundColor="Transparent"
-   >  
-   <VerticalStackLayout Padding="10">  
+    BackgroundColor="#A6000000"
+   >
+    <VerticalStackLayout Padding="10">
 
-       <Label Text="Choose which camera to use:"  
+        <Label Text="Choose which camera to use:"  
               FontSize="Large"  
-              HorizontalOptions="Center" />  
+              HorizontalOptions="Center" />
 
-       <CollectionView  
+        <CollectionView  
            ItemsSource="{Binding Cameras}"  
            SelectionMode="Single"  
-           SelectedItem="{Binding SelectedCamera, Mode=TwoWay}">  
-           <CollectionView.ItemTemplate>  
-               <DataTemplate x:DataType="camera:CameraInfo">  
-                   <StackLayout Padding="10">  
-                       <Label Text="{Binding Name}"  
-                              FontSize="Medium" />  
-                   </StackLayout>  
-               </DataTemplate>  
-           </CollectionView.ItemTemplate>  
-       </CollectionView>  
+           SelectedItem="{Binding SelectedCamera, Mode=TwoWay}">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="camera:CameraInfo">
+                    <Border x:Name="root" Stroke="#40FFFFFF" Padding="8">
+                        <Label Text="{Binding Name}"  
+                              FontSize="Medium" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal"/>
+                                <VisualState x:Name="Selected">
+                                    <VisualState.Setters>
+                                        <Setter TargetName="root" Property="BackgroundColor" Value="#334480FF"/>
+                                        <Setter TargetName="root" Property="Stroke" Value="DodgerBlue"/>
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
 
-       <Button Text="Close" Clicked="CloseButton_Clicked"  
-               VerticalOptions="EndAndExpand" />  
-   </VerticalStackLayout>  
+        <Button Text="Close" Clicked="CloseButton_Clicked" />
+    </VerticalStackLayout>
 </ContentPage>

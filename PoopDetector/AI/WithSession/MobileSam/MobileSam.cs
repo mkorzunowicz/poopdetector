@@ -2,9 +2,7 @@
 //  MobileSam.cs
 // ------------------------------------------------------------
 
-using System.Diagnostics;
 using System.Drawing;
-using Microsoft.Maui.Graphics;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using PoopDetector.AI.Vision.Processing;
@@ -22,9 +20,8 @@ namespace PoopDetector.AI.Vision.MobileSam
     public sealed class MobileSam
         : DoubleVisionBase<MobileSamImageProcessor>, IDisposable
     {
-        private const string EncoderOnnx = "mobile_sam_image_encoder.onnx";
-        //private const string DecoderOnnx = "sam_onnx_decoder.onnx";
-        private const string DecoderOnnx = "sam_onnx_quantized_decoder.onnx";
+        private const string EncoderOnnx = "mobile_sam_encoder.onnx";
+        private const string DecoderOnnx = "mobile_sam_decoder.onnx";
 
         public MobileSam()
             : base("MobileSAMEncoder", EncoderOnnx,
@@ -34,7 +31,7 @@ namespace PoopDetector.AI.Vision.MobileSam
         // --------------------------------------------------------------------
         // internal state after EncodeAsync
         // --------------------------------------------------------------------
-        private float[]? _embedding;          // [1,256,64,64]
+        private float[] _embedding;          // [1,256,64,64]
         private Size _origSize;            // original camera frame
         private Size _encSize;             // (w_res,h_res) long-side-1024
 

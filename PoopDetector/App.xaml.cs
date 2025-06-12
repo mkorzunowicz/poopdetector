@@ -5,6 +5,7 @@ using Windows.Graphics;
 #endif
 using Microsoft.Identity.Client;
 using Microsoft.Maui.Controls;
+using PoopDetector.AI.Vision;
 
 namespace PoopDetector
 {
@@ -32,6 +33,12 @@ namespace PoopDetector
             });
           
             MainPage = new AppShell();
+        }
+        protected override async void OnStart()
+        {
+            base.OnStart();
+
+            await VisionModelManager.Instance.EnsureDefaultModelAsync();
         }
     }
 }

@@ -8,13 +8,32 @@ namespace PoopDetector.AI.Vision;
 
 internal static class Utils
 {
-    internal static async Task<byte[]> LoadResource(string name)
+    internal static async Task<byte[]> LoadResource(string nameOrPath)
     {
-        using Stream fileStream = await FileSystem.Current.OpenAppPackageFileAsync(name);
-        using MemoryStream memoryStream = new MemoryStream();
-        fileStream.CopyTo(memoryStream);
-        return memoryStream.ToArray();
+        // 1.  Is it an absolute or relative *file-system* path?
+        //     (that’s where ModelCache stored the downloaded model)
+        if (File.Exists(nameOrPath))
+            return await File.ReadAllBytesAsync(nameOrPath);
+
+        // 2.  Otherwise treat it as an *embedded* file inside the .apk / .ipa
+        using Stream pkg = await FileSystem.Current.OpenAppPackageFileAsync(nameOrPath);
+        using var ms = new MemoryStream();
+        await pkg.CopyToAsync(ms);
+        return ms.ToArray();
     }
+    internal static async Task<bool> PackageResourceAvailable(string nameOrPath)
+    {
+        try
+        {
+            using Stream pkg = await FileSystem.Current.OpenAppPackageFileAsync(nameOrPath);
+            return pkg.CanRead;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
 
     static async Task<byte[]> GetBytesFromPhotoFile(FileResult fileResult)
     {

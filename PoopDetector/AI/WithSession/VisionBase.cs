@@ -1,5 +1,4 @@
-﻿using Microsoft.Maui.Graphics;
-using Microsoft.ML.OnnxRuntime;
+﻿using Microsoft.ML.OnnxRuntime;
 using PoopDetector.AI.Vision.Processing;
 
 namespace PoopDetector.AI.Vision;
@@ -13,7 +12,6 @@ public class VisionBase<TImageProcessor> : IVision where TImageProcessor : new()
     Task _prevAsyncTask;
     TImageProcessor _imageProcessor;
     InferenceSession _session;
-    ExecutionProviders _curExecutionProvider;
 
     public VisionBase(string name, string modelName)
     {
@@ -98,12 +96,14 @@ public class VisionBase<TImageProcessor> : IVision where TImageProcessor : new()
     {
         _model = await Utils.LoadResource(_modelName);
 
-        //This should allow use of NNAPI, but this ends up running slower than expected. The model might need to be rebuilt with different configuration.
-        //if (DeviceInfo.Platform == DevicePlatform.Android)
+        // This should allow use of NNAPI on android, but this ends up running slower than expected (~3 slower than CPU).
+        // The model might need to be rebuilt with different configuration.
+        // NNAPI is also deprecated
+        if (DeviceInfo.Platform == DevicePlatform.iOS)
+            NewSession(ExecutionProviders.CoreML);
+        //else if (DeviceInfo.Platform == DevicePlatform.Android)
         //    NewSession(ExecutionProviders.NNAPI);
-        //else
+        else
             NewSession(ExecutionProviders.CPU);
-        //_session = new InferenceSession(_model);  // CPU execution provider is always enabled
-        //_curExecutionProvider = ExecutionProviders.CPU;
     }
 }

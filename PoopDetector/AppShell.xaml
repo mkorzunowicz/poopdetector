@@ -86,5 +86,14 @@
             Title="Camera"
             ContentTemplate="{DataTemplate local:PoopCameraPage}"
             Icon="camera_icon.png" />
+        <ShellContent
+            Title="Saved"
+            ContentTemplate="{DataTemplate local:PictureGalleryPage}"
+            Icon="photo_library.png" />
+        <ShellContent
+            Title="Models"
+            ContentTemplate="{DataTemplate local:ModelSelectionPage}"
+            Icon="model_training.png" />
+
     </TabBar>
 </Shell>
