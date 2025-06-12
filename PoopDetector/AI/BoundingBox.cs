@@ -31,7 +31,6 @@ public class PredictionResult
     public async Task RunSamDecode(PointF point = default)
     {
         // NOTE: making polygons out of the mask runs out of memory and kills the app if the mask is too big..
-        return;
         if (VisionModelManager.Instance.MobileSam == null) return;
         var sw = Stopwatch.StartNew();
         if (!VisionModelManager.Instance.MobileSam.CanDecode) return;
@@ -86,8 +85,8 @@ public class PredictionResult
         MaskBitmaps = [mask256];
 
         sw.Restart();
-        MaskToPolygon();
-        Debug.WriteLine($"Mask to polygons took {sw.ElapsedMilliseconds} ms");
+        //MaskToPolygon();
+        //Debug.WriteLine($"Mask to polygons took {sw.ElapsedMilliseconds} ms");
 
     }
     public List<List<int>> Polygons { get; private set; }
