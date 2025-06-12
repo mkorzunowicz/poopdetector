@@ -208,7 +208,7 @@ namespace PoopDetector.Views
             await Task.Factory.StartNew(async () =>
             {
                 // Wait until the model is loaded and playing is true
-                while (!playing || !VisionModelManager.Instance.IsLoaded)
+                while (!playing || VisionModelManager.Instance.IsDownloading || VisionModelManager.Instance.CurrentModel == null)
                 {
                     await Task.Delay(10);
                 }
@@ -449,7 +449,7 @@ namespace PoopDetector.Views
         {
             // Show the modal that allows user to pick a camera
             // Passing our existing ViewModel so that the selection updates it directly
-            await Navigation.PushModalAsync(new ModelSelectionPage(_viewModel));
+            await Navigation.PushModalAsync(new ModelSelectionPage());
         }
     }
 }

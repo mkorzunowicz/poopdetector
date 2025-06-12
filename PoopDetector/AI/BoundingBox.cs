@@ -30,7 +30,9 @@ public class PredictionResult
     }
     public async Task RunSamDecode(PointF point = default)
     {
-if (VisionModelManager.Instance.MobileSam == null) return;
+        // NOTE: making polygons out of the mask runs out of memory and kills the app if the mask is too big..
+        return;
+        if (VisionModelManager.Instance.MobileSam == null) return;
         var sw = Stopwatch.StartNew();
         if (!VisionModelManager.Instance.MobileSam.CanDecode) return;
         SKBitmap mask256;

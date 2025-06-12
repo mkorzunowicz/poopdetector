@@ -24,7 +24,7 @@
 		<SingleProject>true</SingleProject>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>disable</Nullable>
-
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<!-- Display name -->
 		<ApplicationTitle>PoopDetector</ApplicationTitle>
 

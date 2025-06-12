@@ -23,7 +23,6 @@ namespace PoopDetector
                     fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
                     fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
                 });
-            Task.Factory.StartNew(() => VisionModelManager.Instance.LoadModelAsync());
 
             builder.Services.AddSingleton<LoginViewModel>();
             builder.Services.AddSingleton<AppShellViewModel>();

@@ -35,6 +35,10 @@ public partial class PoopCameraViewModel : ObservableObject
     {
         _cameraView = cameraView;
         _modelTypes = new ObservableCollection<VisionModelManager.ModelTypes>(Enum.GetValues<VisionModelManager.ModelTypes>());
+        VisionModelManager.Instance.DownloadError +=
+        async (_, msg) => await MainThread.InvokeOnMainThreadAsync(
+            () => Application.Current.MainPage
+                      .DisplayAlert("Download error", msg, "OK"));
     }
 
     // ────────────────────────── observable props ────────────────
@@ -90,6 +94,9 @@ public partial class PoopCameraViewModel : ObservableObject
                 OnPropertyChanged(nameof(HasTorch));
                 OnPropertyChanged(nameof(ShowSettings));
                 SelectedCameraChanged?.Invoke(value);
+
+                if (DeviceInfo.Platform != DevicePlatform.WinUI)
+                    Application.Current.MainPage.Navigation.PopModalAsync();
             }
         }
     }

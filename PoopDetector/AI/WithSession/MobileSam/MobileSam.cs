@@ -20,9 +20,8 @@ namespace PoopDetector.AI.Vision.MobileSam
     public sealed class MobileSam
         : DoubleVisionBase<MobileSamImageProcessor>, IDisposable
     {
-        private const string EncoderOnnx = "mobile_sam_image_encoder.onnx";
-        //private const string DecoderOnnx = "sam_onnx_decoder.onnx";
-        private const string DecoderOnnx = "sam_onnx_quantized_decoder.onnx";
+        private const string EncoderOnnx = "mobile_sam_encoder.onnx";
+        private const string DecoderOnnx = "mobile_sam_decoder.onnx";
 
         public MobileSam()
             : base("MobileSAMEncoder", EncoderOnnx,

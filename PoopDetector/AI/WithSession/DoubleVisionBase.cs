@@ -108,11 +108,13 @@ public class DoubleVisionBase<TImageProcessor> : IVision where TImageProcessor :
         _model = await Utils.LoadResource(_modelName);
         _model2 = await Utils.LoadResource(_model2Name);
 
-        //This should allow use of NNAPI, but this ends up running slower than expected. The model might need to be rebuilt with different configuration.
+        // This should allow use of NNAPI on android, but this ends up running slower than expected (~3 slower than CPU).
+        // The model might need to be rebuilt with different configuration.
+        // NNAPI is also deprecated
         if (DeviceInfo.Platform == DevicePlatform.iOS)
             NewSession(ExecutionProviders.CPU);
-        else if (DeviceInfo.Platform == DevicePlatform.Android)
-            NewSession(ExecutionProviders.NNAPI);
+        //else if (DeviceInfo.Platform == DevicePlatform.Android)
+        //    NewSession(ExecutionProviders.NNAPI);
         else
             NewSession(ExecutionProviders.CPU);
     }

@@ -89,7 +89,11 @@
         <ShellContent
             Title="Saved"
             ContentTemplate="{DataTemplate local:PictureGalleryPage}"
-            Icon="gallery_icon.png" />
+            Icon="photo_library.png" />
+        <ShellContent
+            Title="Models"
+            ContentTemplate="{DataTemplate local:ModelSelectionPage}"
+            Icon="model_training.png" />
 
     </TabBar>
 </Shell>
