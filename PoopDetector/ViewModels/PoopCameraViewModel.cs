@@ -26,7 +26,7 @@ public partial class PoopCameraViewModel : ObservableObject
     private readonly CameraView _cameraView;
     private readonly PoopPictureStorageService _storage = new();
 
-    private int _fps;
+    private double _fps;
     private CameraInfo _selectedCamera;
     private ObservableCollection<CameraInfo> _cameras = new();
 
@@ -60,10 +60,10 @@ public partial class PoopCameraViewModel : ObservableObject
     public bool ShowSettings => Cameras.Count > 1 && !FrozenPictureIsVisible;
     public bool NoCamerasAvailable => Cameras.Count == 0;
 
-    public int FPS
+    public double FPS
     {
         get => _fps;
-        set => SetProperty(ref _fps, value);
+        set => SetProperty(ref _fps, Math.Round(value,2));
     }
 
     // ────────────────────────── properties for binding ──────────

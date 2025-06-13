@@ -20,6 +20,7 @@ namespace PoopDetector.Views
 
         bool playing = false;
         bool debug = true;
+        bool benchmark = true;
 
         public PoopCameraPage()
         {
@@ -33,10 +34,10 @@ namespace PoopDetector.Views
             {
                 if (e.PropertyName == nameof(PoopCameraViewModel.SamResultReady))
                     if (_viewModel.SamResultReady)
-                    Dispatcher.DispatchAsync(async() =>
-                        {
-                            maskCanvasView.InvalidateSurface();
-                        });                        
+                        Dispatcher.DispatchAsync(async () =>
+                            {
+                                maskCanvasView.InvalidateSurface();
+                            });
             };
         }
 
@@ -102,12 +103,12 @@ namespace PoopDetector.Views
             SKPaint fill = new SKPaint { IsStroke = false, Color = SKColors.Blue.WithAlpha(0x80) };
             try
             {
-               // Still throws sometimes on Windows screen resize
-               canvas.DrawBitmap(mask, 0, 0, fill);
+                // Still throws sometimes on Windows screen resize
+                canvas.DrawBitmap(mask, 0, 0, fill);
             }
             catch (Exception ex)
             {
-               Debug.WriteLine(ex.Message);
+                Debug.WriteLine(ex.Message);
             }
 
             // canvas.Restore();
@@ -215,6 +216,8 @@ namespace PoopDetector.Views
                 Stopwatch loopStopwatch = Stopwatch.StartNew();
                 int loopCount = 0;
 
+                var sw = Stopwatch.StartNew();
+                if (!benchmark) sw.Stop();
                 while (playing)
                 {
                     try
@@ -224,16 +227,19 @@ namespace PoopDetector.Views
                             await Task.Delay(100);
                             continue;
                         }
+                        Stream stream;
+                        if (DeviceInfo.Platform == DevicePlatform.Android)
+                            stream = cameraView.GetSnapShotStream(Camera.MAUI.ImageFormat.JPEG); // twice as fast but only on Android
+                        else
+                            stream = await cameraView.TakePhotoAsync(Camera.MAUI.ImageFormat.JPEG);
 
-                        var stream = cameraView.GetSnapShotStream(Camera.MAUI.ImageFormat.JPEG);
-
-                        // var stream = await cameraView.TakePhotoAsync(Camera.MAUI.ImageFormat.JPEG);
                         if (stream == null || !stream.CanRead)
                         {
                             await Task.Delay(100);
                             continue;
                         }
 
+                        if (benchmark) Debug.WriteLine($"Stream read: {sw.ElapsedMilliseconds} ms");
                         ////testing fixed image:
                         //// add the file to Resources\Raw
                         //var name = "picture.jpg";
@@ -254,19 +260,28 @@ namespace PoopDetector.Views
                         ////testing
 
                         await GetVisionPrediction(stream);
+                        if (benchmark) Debug.WriteLine($"Prediction:  {sw.ElapsedMilliseconds} ms");
                         await Dispatcher.DispatchAsync(async () =>
                         {
                             canvasView.InvalidateSurface();
                         });
 
                         loopCount++;
-                        if (loopStopwatch.ElapsedMilliseconds >= 1000)
+                        if (loopCount == 1 && loopStopwatch.ElapsedMilliseconds >= 1000)
+                        {
+                            if (debug) Debug.WriteLine($"FPS: {(double)1000 / loopStopwatch.ElapsedMilliseconds}");
+                            _viewModel.FPS = (double)1000 / loopStopwatch.ElapsedMilliseconds;
+                            loopCount = 0;
+                            loopStopwatch.Restart();
+                        }
+                        else if (loopStopwatch.ElapsedMilliseconds >= 1000)
                         {
                             if (debug) Debug.WriteLine($"FPS: {loopCount}");
                             _viewModel.FPS = loopCount;
                             loopCount = 0;
                             loopStopwatch.Restart();
                         }
+                        sw.Restart();
                     }
                     catch (Exception ex)
                     {
