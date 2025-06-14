@@ -228,8 +228,8 @@ namespace PoopDetector.Views
                             continue;
                         }
                         Stream stream;
-                        if (DeviceInfo.Platform == DevicePlatform.Android)
-                            stream = cameraView.GetSnapShotStream(Camera.MAUI.ImageFormat.JPEG); // twice as fast but only on Android
+                        if (DeviceInfo.Platform == DevicePlatform.Android || DeviceInfo.Platform == DevicePlatform.iOS)
+                            stream = cameraView.GetSnapShotStream(Camera.MAUI.ImageFormat.JPEG);
                         else
                             stream = await cameraView.TakePhotoAsync(Camera.MAUI.ImageFormat.JPEG);
 
