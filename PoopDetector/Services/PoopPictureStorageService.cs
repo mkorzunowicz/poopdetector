@@ -23,15 +23,17 @@ public sealed class PoopPictureStorageService
 
     public async Task SaveAsync(byte[] imageBytes, SKBitmap maskBitmap)
     {
-        if (imageBytes == null || maskBitmap == null) return;
+        if (imageBytes == null) return;
 
         var id = Guid.NewGuid().ToString("N");
         var jpg = Path.Combine(_root, $"{id}.jpg");
-        var png = Path.Combine(_root, $"{id}_mask.png");
 
         // save JPG
         await File.WriteAllBytesAsync(jpg, imageBytes);
 
+        if (maskBitmap == null) return;
+
+        var png = Path.Combine(_root, $"{id}_mask.png");
         // save PNG mask (with alpha)
         using var data = maskBitmap.Encode(SKEncodedImageFormat.Png, 100);
         await File.WriteAllBytesAsync(png, data.ToArray());
@@ -44,7 +46,7 @@ public sealed class PoopPictureStorageService
             {
                 var id = Path.GetFileNameWithoutExtension(jpg);
                 var png = Path.Combine(_root, $"{id}_mask.png");
-                if (!File.Exists(png)) return null;        // ignore orphaned files
+                //if (!File.Exists(png)) return null;        // ignore orphaned files
 
                 return new SavedPoopPicture
                 {

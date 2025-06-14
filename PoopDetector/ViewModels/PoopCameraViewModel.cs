@@ -45,6 +45,7 @@ public partial class PoopCameraViewModel : ObservableObject
     [ObservableProperty] private bool samResultReady;
     [ObservableProperty] private bool samRunning;
     [ObservableProperty] private bool torchOn;
+    [ObservableProperty] private bool skipSam;
 
     // hook to refresh AcceptPictureCommand
     //partial void OnSamResultReadyChanged(bool value) =>
@@ -54,6 +55,7 @@ public partial class PoopCameraViewModel : ObservableObject
     public bool HasTorch => _selectedCamera?.HasFlashUnit == true;
     public bool PausePredictions { get; set; }
     public bool FrozenPictureIsVisible { get; set; }
+    public bool ClearMaskIsVisible => !SkipSam && FrozenPictureIsVisible;
     public bool CameraIsVisible { get; set; } = true;
 
     public bool ShowSelectModel => ModelTypes.Count > 1 && !FrozenPictureIsVisible;
@@ -148,7 +150,9 @@ public partial class PoopCameraViewModel : ObservableObject
         CameraIsVisible = true;
         OnPropertyChanged(nameof(CameraIsVisible));
         OnPropertyChanged(nameof(FrozenPictureIsVisible));
+        OnPropertyChanged(nameof(ClearMaskIsVisible));
         OnPropertyChanged(nameof(ShowSettings));
+
         return Task.CompletedTask;
     }
 
@@ -159,7 +163,7 @@ public partial class PoopCameraViewModel : ObservableObject
         try
         {
             var imgBytes = CurrentPrediction.InputImage;
-            var maskBmp = CurrentPrediction.MaskBitmaps.First();
+            var maskBmp = CurrentPrediction.MaskBitmaps.FirstOrDefault();
 
             await _storage.SaveAsync(imgBytes, maskBmp);
 
@@ -190,14 +194,18 @@ public partial class PoopCameraViewModel : ObservableObject
         OnPropertyChanged(nameof(FrozenPictureImageSource));
         OnPropertyChanged(nameof(CameraIsVisible));
         OnPropertyChanged(nameof(FrozenPictureIsVisible));
-        OnPropertyChanged(nameof(ShowSettings));
+        OnPropertyChanged(nameof(ClearMaskIsVisible));
+        OnPropertyChanged(nameof(ShowSettings)); 
 
-        SamRunning = true;
-        await CurrentPrediction.RunSamEncode();
-        await CurrentPrediction.RunSamDecode();
-        SamRunning = false;
-        OnPropertyChanged(nameof(CanAcceptPicture));
-        SamResultReady = true;      // triggers UI & can-execute refresh
+        if (!skipSam)
+        {
+            SamRunning = true;
+            await CurrentPrediction.RunSamEncode();
+            await CurrentPrediction.RunSamDecode();
+            SamRunning = false;
+            OnPropertyChanged(nameof(CanAcceptPicture));
+            SamResultReady = true;      // triggers UI & can-execute refresh
+        }
     }
 
     public void AddPredictionResult(PredictionResult result)
