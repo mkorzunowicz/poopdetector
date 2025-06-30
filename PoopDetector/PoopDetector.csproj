@@ -118,10 +118,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\..\Camera.Maui\Camera.MAUI\Camera.MAUI.csproj" />
-	</ItemGroup>
-
-	<ItemGroup>
 		<Compile Update="Views\PoopCameraPage.xaml.cs">
 			<DependentUpon>PoopCameraPage.xaml</DependentUpon>
 		</Compile>
