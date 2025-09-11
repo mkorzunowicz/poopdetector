@@ -117,6 +117,45 @@ public partial class PoopCameraViewModel : ObservableObject
         }
     }
 
+    // --------- FastVLM prompt + output (one-shot) ---------
+    [ObservableProperty]
+    private string promptText = "You are a vision assistant. Answer strictly JSON with keys: feces:boolean, confidence:number, explanation:string. Question: Does this image contain visible feces?";
+
+    [ObservableProperty]
+    private string lastVlmJson;
+
+    [RelayCommand]
+    private async Task AnalyzeWithVlm()
+    {
+        try
+        {
+            if (VisionModelManager.Instance.CurrentModel == null)
+                return;
+
+            // capture single frame
+            Stream stream;
+            if (DeviceInfo.Platform == DevicePlatform.Android || DeviceInfo.Platform == DevicePlatform.iOS)
+                stream = _cameraView.GetSnapShotStream(Camera.MAUI.ImageFormat.JPEG);
+            else
+                stream = await _cameraView.TakePhotoAsync(Camera.MAUI.ImageFormat.JPEG);
+
+            if (stream == null) return;
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+
+            var json = await VisionModelManager.Instance.AnalyzeWithVlmAsync(ms.ToArray(), PromptText, 16);
+            LastVlmJson = json;
+
+            // also show a quick dialog for convenience
+            if (Application.Current?.MainPage != null)
+                await Application.Current.MainPage.DisplayAlert("VLM Result", json, "OK");
+        }
+        catch (Exception ex)
+        {
+            LastVlmJson = $"{DateTime.Now:o} error: {ex.Message}";
+        }
+    }
+
     // ────────────────────────── prediction storage ──────────────
     public PredictionResult CurrentPrediction { get; private set; }
     public List<PredictionResult> LastPredictions { get; } = new(5);

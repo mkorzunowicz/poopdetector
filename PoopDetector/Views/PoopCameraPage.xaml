@@ -18,7 +18,7 @@
         </ResourceDictionary>
     </ContentPage.Resources>
 
-    <Grid HorizontalOptions="Fill" VerticalOptions="Fill" RowDefinitions="*,80,40">
+    <Grid HorizontalOptions="Fill" VerticalOptions="Fill" RowDefinitions="*,80,56">
         <!-- 
             If no cameras are available, show a message. 
             Otherwise, we show the rest of the camera UI.
@@ -257,6 +257,16 @@
 
             </Grid>
         </VerticalStackLayout>
+
+        <!-- Prompt + Analyze (VLM) small bar -->
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Padding="8" BackgroundColor="#22000000">
+            <Entry Placeholder="Enter prompt for VLM"
+                   Text="{Binding PromptText}"
+                   TextColor="White"/>
+            <Button Grid.Column="1" Text="Analyze"
+                    Command="{Binding AnalyzeWithVlmCommand}"
+                    BackgroundColor="{StaticResource Primary}"/>
+        </Grid>
         <Grid Background="#A6000000" HorizontalOptions="Fill" VerticalOptions="Fill" IsVisible="{Binding SamRunning}">
         <ActivityIndicator  Color="Aqua" IsRunning="True" />
 

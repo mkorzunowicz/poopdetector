@@ -35,9 +35,25 @@ public partial class VisionModelManager : ObservableObject
 
         try
         {
-            string localPath = await EnsureModelFileAsync(type, cancel);
-            CurrentModel = CreateVisionWrapper(type, localPath);
-            _cache[type] = CurrentModel;
+            if (type == ModelTypes.FastVLM05B)
+            {
+                string dec = await EnsureFastVlmInt8Async(new Progress<double>(p => DownloadProgress = p), cancel);
+                CurrentModel = new FastVLM.FastVlm(
+                    // Prefer fp16 encoder to avoid ConvInteger kernel issues
+                    Path.Combine(FileSystem.Current.AppDataDirectory, "vision_encoder_fp16.onnx"),
+                    Path.Combine(FileSystem.Current.AppDataDirectory, "embed_tokens_int8.onnx"),
+                    Path.Combine(FileSystem.Current.AppDataDirectory, "decoder_model_merged_int8.onnx"),
+                    Path.Combine(FileSystem.Current.AppDataDirectory, "vocab.json"),
+                    Path.Combine(FileSystem.Current.AppDataDirectory, "merges.txt"),
+                    Path.Combine(FileSystem.Current.AppDataDirectory, "tokenizer.json"));
+                _cache[type] = CurrentModel;
+            }
+            else
+            {
+                string localPath = await EnsureModelFileAsync(type, cancel);
+                CurrentModel = CreateVisionWrapper(type, localPath);
+                _cache[type] = CurrentModel;
+            }
         }
         catch (Exception ex)
         {
@@ -50,6 +66,24 @@ public partial class VisionModelManager : ObservableObject
         {
             IsDownloading = false;
         }
+    }
+    static async Task<string> EnsureFastVlmInt8Async(IProgress<double> progress, CancellationToken ct)
+    {
+        // Download 4 artifacts and advance progress by quarters
+        double baseProg = 0;
+        void ReportPart(double part) => progress.Report(baseProg + 0.25 * part);
+        string root = "https://huggingface.co/onnx-community/FastVLM-0.5B-ONNX/resolve/main/";
+        _ = await ModelCache.GetAsync(root + "onnx/vision_encoder_fp16.onnx", "vision_encoder_fp16.onnx", new Progress<double>(ReportPart), ct);
+        baseProg = 0.25;
+        _ = await ModelCache.GetAsync(root + "onnx/embed_tokens_int8.onnx", "embed_tokens_int8.onnx", new Progress<double>(ReportPart), ct);
+        baseProg = 0.50;
+        string dec = await ModelCache.GetAsync(root + "onnx/decoder_model_merged_int8.onnx", "decoder_model_merged_int8.onnx", new Progress<double>(ReportPart), ct);
+        baseProg = 0.75;
+        _ = await ModelCache.GetAsync(root + "merges.txt", "merges.txt", new Progress<double>(ReportPart), ct);
+        _ = await ModelCache.GetAsync(root + "vocab.json", "vocab.json", new Progress<double>(ReportPart), ct);
+        _ = await ModelCache.GetAsync(root + "tokenizer.json", "tokenizer.json", new Progress<double>(ReportPart), ct);
+        progress.Report(1.0);
+        return dec; // return any; wrapper will resolve others from AppDataDirectory
     }
     const string _defaultUrl =
     "https://github.com/mkorzunowicz/poop_models/raw/refs/heads/main/" +
@@ -195,6 +229,14 @@ public partial class VisionModelManager : ObservableObject
         };
     }
 
+    // Simple helper to route VLM prompts when the active model supports it
+    public async Task<string> AnalyzeWithVlmAsync(byte[] image, string prompt, int maxNewTokens = 12, CancellationToken cancel = default)
+    {
+        if (CurrentModel is FastVLM.IVisualLanguageModel vlm)
+            return await vlm.GenerateAsync(image, prompt, maxNewTokens, cancel);
+        throw new InvalidOperationException("Current model is not a VLM");
+    }
+
     /// <summary>
     /// Raised whenever downloading or reading a model fails.
     /// </summary>
@@ -213,5 +255,6 @@ public partial class VisionModelManager : ObservableObject
         YoloxNanoPoop,
         Yolov9ScatSpotter,
         YoloxNano,
+        FastVLM05B,
     }
 }

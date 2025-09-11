@@ -205,19 +205,25 @@ namespace PoopDetector.Views
 
         private async void StartPredictionLoop()
         {
-            Debug.WriteLine("STart prediction loop.");
+            Debug.WriteLine("Start prediction loop.");
             await Task.Factory.StartNew(async () =>
             {
-                // Wait until the model is loaded and playing is true
                 while (!playing || VisionModelManager.Instance.IsDownloading || VisionModelManager.Instance.CurrentModel == null)
                 {
                     await Task.Delay(10);
                 }
+
                 Stopwatch loopStopwatch = Stopwatch.StartNew();
                 int loopCount = 0;
 
-                var sw = Stopwatch.StartNew();
+                var sw = new Stopwatch();
                 if (!benchmark) sw.Stop();
+
+                Queue<long> streamTimes = new Queue<long>();
+                Queue<long> inferenceTimes = new Queue<long>();
+
+                const int maxSamples = 30;
+
                 while (playing)
                 {
                     try
@@ -227,11 +233,15 @@ namespace PoopDetector.Views
                             await Task.Delay(100);
                             continue;
                         }
+
+                        sw.Restart();
                         Stream stream;
                         if (DeviceInfo.Platform == DevicePlatform.Android || DeviceInfo.Platform == DevicePlatform.iOS)
                             stream = cameraView.GetSnapShotStream(Camera.MAUI.ImageFormat.JPEG);
                         else
                             stream = await cameraView.TakePhotoAsync(Camera.MAUI.ImageFormat.JPEG);
+
+                        var streamTime = sw.ElapsedMilliseconds;
 
                         if (stream == null || !stream.CanRead)
                         {
@@ -239,29 +249,26 @@ namespace PoopDetector.Views
                             continue;
                         }
 
-                        if (benchmark) Debug.WriteLine($"Stream read: {sw.ElapsedMilliseconds} ms");
-                        ////testing fixed image:
-                        //// add the file to Resources\Raw
-                        //var name = "picture.jpg";
-                        //// 1) open as read-only stream (in MAUI Assets / Resources)
-                        //using Stream imgStream = await FileSystem.Current.OpenAppPackageFileAsync(name);
-                        //MemoryStream memoryStream = new MemoryStream();
-                        //imgStream.CopyTo(memoryStream);
-                        //// 2) peek size with Skia (optional)
-                        //memoryStream.Position = 0;
-                        //imgStream.Position = 0;
-                        //if (height == 0)
-                        //{
-                        //    using var bmp = SKBitmap.Decode(imgStream);
-                        //    width = bmp.Width;
-                        //    height = bmp.Height;
-                        //await GetVisionPrediction(memoryStream);
-                        //}
-                        ////testing
-
+                        sw.Restart();
                         await GetVisionPrediction(stream);
-                        if (benchmark) Debug.WriteLine($"Prediction:  {sw.ElapsedMilliseconds} ms");
-                        await Dispatcher.DispatchAsync(async () =>
+                        var inferenceTime = sw.ElapsedMilliseconds;
+
+                        // Maintain last 30 durations
+                        if (streamTimes.Count >= maxSamples) streamTimes.Dequeue();
+                        if (inferenceTimes.Count >= maxSamples) inferenceTimes.Dequeue();
+                        streamTimes.Enqueue(streamTime);
+                        inferenceTimes.Enqueue(inferenceTime);
+
+                        // Compute averages
+                        var avgStream = streamTimes.Count > 0 ? streamTimes.Average() : 0;
+                        var avgInference = inferenceTimes.Count > 0 ? inferenceTimes.Average() : 0;
+
+                        if (benchmark)
+                        {
+                            Debug.WriteLine($"Stream read: {streamTime}ms, avg: {avgStream:F1}ms. Inference: {inferenceTime}ms, avg: {avgInference:F1}ms.");
+                        }
+
+                        await Dispatcher.DispatchAsync(() =>
                         {
                             canvasView.InvalidateSurface();
                         });
@@ -281,7 +288,6 @@ namespace PoopDetector.Views
                             loopCount = 0;
                             loopStopwatch.Restart();
                         }
-                        sw.Restart();
                     }
                     catch (Exception ex)
                     {
@@ -295,6 +301,12 @@ namespace PoopDetector.Views
         int height, width;
         private async Task GetVisionPrediction(Stream stream)
         {
+            // Skip continuous inference when a VLM is active; handled by Analyze button
+            if (VisionModelManager.Instance.CurrentModel is PoopDetector.AI.Vision.FastVLM.IVisualLanguageModel)
+            {
+                await Task.Delay(50);
+                return;
+            }
             if (height == 0)
             {
                 var image = MLImage.CreateFromStream(stream);
