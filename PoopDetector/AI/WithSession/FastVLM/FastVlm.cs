@@ -22,7 +22,7 @@ public sealed class FastVlm : IVision, IVisualLanguageModel
     InferenceSession _enc;
     InferenceSession _emb;
     InferenceSession _dec;
-    ITokenizer _tok;
+    HfTokenizer _tok;
 
     public string Name => "FastVLM-0.5B-int8";
     public string ModelName => "FastVLM-0.5B-int8";

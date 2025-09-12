@@ -1,30 +1,35 @@
-using Microsoft.ML.OnnxRuntime;
+﻿using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using PoopDetector.AI.Vision;
 using PoopDetector.AI.Vision.Processing;
 using System.Diagnostics;
 using System.Linq;
-using System.Text;
 
 namespace PoopDetector.AI.Vision.FastVLM;
 
-/// <summary>
-/// Simplified FastVLM implementation following transformers.js patterns
-/// </summary>
-public sealed class FastVlmSimple : IVision, IVisualLanguageModel
+/// FastVLM 0.5B ONNX wrapper (vision_encoder + embed_tokens + decoder_model_merged).
+/// Step 0: splice [pre_text_embeds] + [image_embeds] + [post_text_embeds]  -> decoder(inputs_embeds) + empty KV
+/// Step N: pass ONLY the new token embedding + previous KV (no image, no full prompt) with full-length attention mask.
+public sealed class FastVlmSimple : IVision, IVisualLanguageModel, IDisposable
 {
+    // Special IDs (from tokenizer_config.json)
+    public const int EndOfTextId = 151643;   // "<|endoftext|>"
+    public const int ImStartId = 151644;   // "<|im_start|>"
+    public const int ImEndId = 151645;   // "<|im_end|>"
+    public const int ImageId = 151646;   // "<image>"
+
     readonly string _encPath;
     readonly string _embPath;
     readonly string _decPath;
-    readonly string _tokenizerPath;
     readonly string _vocabPath;
     readonly string _mergesPath;
+
     readonly FastVlmImageProcessor _image = new(448);
 
     InferenceSession _enc;
     InferenceSession _emb;
     InferenceSession _dec;
-    ITokenizer _tok;
+    HfTokenizer _tok;
 
     public string Name => "FastVLM-0.5B-Simple";
     public string ModelName => "FastVLM-0.5B-Simple";
@@ -33,44 +38,42 @@ public sealed class FastVlmSimple : IVision, IVisualLanguageModel
     public Microsoft.Maui.Graphics.Size InputSize => new(448, 448);
     public FastVlmImageProcessor ImageProcessor => _image;
 
-    public FastVlmSimple(string visionEncoderPath,
-                        string embedTokensPath,
-                        string decoderPath,
-                        string vocabPath,
-                        string mergesPath,
-                        string tokenizerJsonPath)
+    public FastVlmSimple(
+        string visionEncoderPath,
+        string embedTokensPath,
+        string decoderPath,
+        string vocabPath,
+        string mergesPath,
+        string _ /* tokenizer.json not used here */)
     {
         _encPath = visionEncoderPath;
         _embPath = embedTokensPath;
         _decPath = decoderPath;
-        _tokenizerPath = tokenizerJsonPath;
         _vocabPath = vocabPath;
         _mergesPath = mergesPath;
     }
 
-    public static async Task<FastVlmSimple> CreateAsync(string visionEncoderPath,
-                                                       string embedTokensPath,
-                                                       string decoderPath,
-                                                       string vocabPath,
-                                                       string mergesPath,
-                                                       CancellationToken cancellationToken = default)
+    public static async Task<FastVlmSimple> CreateAsync(
+        string visionEncoderPath,
+        string embedTokensPath,
+        string decoderPath,
+        string vocabPath,
+        string mergesPath,
+        CancellationToken cancellationToken = default)
     {
-        var model = new FastVlmSimple(visionEncoderPath, embedTokensPath, decoderPath, 
-                                     vocabPath, mergesPath, string.Empty);
-        await model.InitializeAsync();
-        return model;
+        var m = new FastVlmSimple(visionEncoderPath, embedTokensPath, decoderPath, vocabPath, mergesPath, "");
+        await m.InitializeAsync();
+        return m;
     }
 
-    // IVision interface implementations
     public async Task InitializeAsync()
     {
         await Task.Run(() =>
         {
-            var encOpt = new SessionOptions();
+            var encOpt = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
 #if IOS
             encOpt.AppendExecutionProvider_CoreML(CoreMLFlags.COREML_FLAG_ONLY_ENABLE_DEVICE_WITH_ANE);
 #endif
-            encOpt.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
             _enc = new InferenceSession(File.ReadAllBytes(_encPath), encOpt);
 
             var cpu = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
@@ -81,17 +84,15 @@ public sealed class FastVlmSimple : IVision, IVisualLanguageModel
         });
     }
 
-    public async Task UpdateExecutionProviderAsync(ExecutionProviders executionProvider)
+    public async Task UpdateExecutionProviderAsync(ExecutionProviders ep)
     {
         await Task.Run(() =>
         {
-            _enc?.Dispose();
-            _emb?.Dispose();
-            _dec?.Dispose();
+            _enc?.Dispose(); _emb?.Dispose(); _dec?.Dispose();
 
-            var encOpt = BuildOptions(executionProvider);
-            var decOpt = BuildOptions(executionProvider);
-            var embOpt = BuildOptions(executionProvider);
+            var encOpt = BuildOptions(ep);
+            var embOpt = BuildOptions(ep);
+            var decOpt = BuildOptions(ep);
 
             _enc = new InferenceSession(File.ReadAllBytes(_encPath), encOpt);
             _emb = new InferenceSession(File.ReadAllBytes(_embPath), embOpt);
@@ -99,764 +100,202 @@ public sealed class FastVlmSimple : IVision, IVisualLanguageModel
         });
     }
 
-    public async Task<ImageProcessingResult> ProcessImageAsync(byte[] image)
-    {
-        const string defaultPrompt = "What do you see in this image?";
-        string json = await GenerateAsync(image, defaultPrompt, 20);
-        return new ImageProcessingResult(image, caption: json);
-    }
-
-    // Helper method for execution provider options
     static SessionOptions BuildOptions(ExecutionProviders ep)
     {
-        var options = new SessionOptions
-        {
-            GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL
-        };
+        var o = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
         switch (ep)
         {
-            case ExecutionProviders.NNAPI:
-                options.AppendExecutionProvider_Nnapi();
-                break;
-            case ExecutionProviders.CoreML:
-                options.AppendExecutionProvider_CoreML(CoreMLFlags.COREML_FLAG_ONLY_ENABLE_DEVICE_WITH_ANE);
-                break;
-            case ExecutionProviders.OpenVINO:
-                options.AppendExecutionProvider_OpenVINO();
-                break;
-            case ExecutionProviders.CUDA:
-                options.AppendExecutionProvider_CUDA(new OrtCUDAProviderOptions());
-                break;
+            case ExecutionProviders.NNAPI: o.AppendExecutionProvider_Nnapi(); break;
+            case ExecutionProviders.CoreML: o.AppendExecutionProvider_CoreML(CoreMLFlags.COREML_FLAG_ONLY_ENABLE_DEVICE_WITH_ANE); break;
+            case ExecutionProviders.OpenVINO: o.AppendExecutionProvider_OpenVINO(); break;
+            case ExecutionProviders.CUDA: o.AppendExecutionProvider_CUDA(new OrtCUDAProviderOptions()); break;
             case ExecutionProviders.CPU:
-            default:
-                break;
+            default: break;
         }
-        return options;
+        return o;
     }
 
-    public async Task<string> GenerateAsync(byte[] image, string prompt, int maxNewTokens = 50, CancellationToken ct = default)
+    public async Task<ImageProcessingResult> ProcessImageAsync(byte[] image)
+    {
+        const string defaultPrompt = "Describe this image in one sentence.";
+        var text = await GenerateAsync(image, defaultPrompt, 64);
+        return new ImageProcessingResult(image, caption: text);
+    }
+
+    public async Task<string> GenerateAsync(byte[] image, string prompt, int maxNewTokens = 64, CancellationToken ct = default)
     {
         return await Task.Run(() =>
         {
-            try
-            {
-                Debug.WriteLine($"=== Starting generation with merged decoder approach ===");
-                
-            // 1. Process image through vision encoder
-            // Input: pixel_values (float32[s0,3,s1,s2])  
-            // Output: image_features (float32[s0,((((s1-1)//64))+1)*((((s2-1)//64))+1),896])
+            // 1) Vision encoder → visual embeddings
             using var bmp = _image.PreprocessSourceImage(image);
-            var imgTensor = _image.GetTensorForImage(bmp);
+            var pixelValues = _image.GetTensorForImage(bmp);               // float32 [1,3,448,448]
+            using var encOut = _enc.Run(new[] { NamedOnnxValue.CreateFromTensor("pixel_values", pixelValues) });
+            var imgEmb = encOut.First().AsTensor<float>();                 // float32 [1,V,896]
+            int V = (int)imgEmb.Dimensions[1];
+            int H = (int)imgEmb.Dimensions[2];                             // hidden size (896)
 
-            using var encRes = _enc.Run(new[] { NamedOnnxValue.CreateFromTensor("pixel_values", imgTensor) });
-            var imgEmbTensor = encRes.First().AsTensor<float>();
+            // 2) ChatML prompt (exact structure) with ONE <image>, then EXPAND to V tokens
+            string system = "You are a helpful visual AI assistant. Respond concisely and accurately to the user's query in one sentence.";
+            string user = $"<image>{(string.IsNullOrWhiteSpace(prompt) ? "Describe the image." : prompt)}";
+            var oneImage = _tok.TokenizeChatWithSingleImage(system, user, addGenerationPrompt: true);
+            var expanded = _tok.ExpandSingleImageToken(oneImage, V);
 
-            Debug.WriteLine($"Vision encoder input shape: [{string.Join("x", imgTensor.Dimensions.ToArray())}]");
-            Debug.WriteLine($"Vision encoder output shape: [{string.Join("x", imgEmbTensor.Dimensions.ToArray())}]");                // 2. Use proper Apple FastVLM format with <image> placeholder
-                const string userQuestion = "What do you see in this image?";
-                const string appleFormat = $"<image>\n{userQuestion}";
-                
-                // Split on <image> and handle the IMAGE_TOKEN_INDEX = -200
-                var parts = appleFormat.Split("<image>");
-                if (parts.Length != 2)
-                {
-                    throw new InvalidOperationException("Prompt must contain exactly one <image> placeholder");
-                }
-                
-                string preImageText = parts[0];
-                string postImageText = parts[1];
-                
-                // Tokenize parts
-                var preTokens = string.IsNullOrEmpty(preImageText) ? new int[0] : _tok.Encode(preImageText);
-                var postTokens = _tok.Encode(postImageText);
-                
-                const int IMAGE_TOKEN_INDEX = -200;
-                
-                // Construct token sequence
-                var inputTokens = new List<int>();
-                inputTokens.AddRange(preTokens);
-                inputTokens.Add(IMAGE_TOKEN_INDEX);
-                inputTokens.AddRange(postTokens);
-                
-                Debug.WriteLine($"Input tokens: [{string.Join(", ", inputTokens)}]");
-                
-                // Convert tokens to tensor
-                var inputIdsTensor = new DenseTensor<long>(new[] { 1, inputTokens.Count });
-                for (int i = 0; i < inputTokens.Count; i++)
-                {
-                    inputIdsTensor[0, i] = inputTokens[i];
-                }
+            // 3) Text embeddings for the WHOLE expanded sequence
+            var idsT = new DenseTensor<long>(new[] { 1, expanded.Count });
+            for (int i = 0; i < expanded.Count; i++) idsT[0, i] = expanded[i];
+            using var embOut = _emb.Run(new[] { NamedOnnxValue.CreateFromTensor("input_ids", idsT) });
+            var textEmb = embOut.First().AsTensor<float>();                // float32 [1,T,896]
+            int T = (int)textEmb.Dimensions[1];
 
-                // 3. Try to run the decoder model with both image features and input tokens
-                // The decoder_model_merged should handle the projection internally
-                
-                var inputs = new List<NamedOnnxValue>
-                {
-                    NamedOnnxValue.CreateFromTensor("input_ids", inputIdsTensor),
-                    NamedOnnxValue.CreateFromTensor("pixel_values", imgTensor)  // Pass image directly to decoder
-                };
+            // 4) Masked-scatter: replace the contiguous <image> block with imgEmb (NO extra scaling)
+            var (start, len) = _tok.FindImageTokenBlock(expanded);
+            len = System.Math.Min(len, V);
 
-                Debug.WriteLine("Running decoder with input_ids and pixel_values...");
-                using var decRes = _dec.Run(inputs);
-                var outputs = decRes.ToArray();
-                
-                Debug.WriteLine($"Decoder outputs: {outputs.Length} tensors");
-                foreach (var output in outputs)
-                {
-                    Debug.WriteLine($"- {output.Name}: {string.Join("x", output.AsTensor<float>().Dimensions.ToArray())}");
-                }
-                
-                var logits = outputs[0].AsTensor<float>();
-                
-                // Sample from logits for the last position
-                int seqLen = (int)logits.Dimensions[1];
-                int vocabSize = (int)logits.Dimensions[2];
-                
-                Debug.WriteLine($"Logits shape: [1, {seqLen}, {vocabSize}]");
-                
-                var lastTokenLogits = new float[vocabSize];
-                for (int i = 0; i < vocabSize; i++)
-                {
-                    lastTokenLogits[i] = logits[0, seqLen - 1, i];
-                }
-
-                // Sample next token
-                var nextTokenId = SampleNextToken(lastTokenLogits, null);
-                string result = _tok.Decode(new[] { nextTokenId });
-                
-                Debug.WriteLine($"Generated token {nextTokenId} = '{result}'");
-                return result;
-            }
-            catch (Exception ex)
+            var combined = new DenseTensor<float>(new[] { 1, T, H });
+            // copy textEmb
+            var textArr = textEmb.ToArray();
+            var dstSpan = combined.Buffer.Span;
+            for (int i = 0; i < textArr.Length; i++) dstSpan[i] = textArr[i];
+            // overwrite the image span with imgEmb
+            var imgArr = imgEmb.ToArray();
+            for (int i = 0; i < len; i++)
             {
-                Debug.WriteLine($"Error in GenerateAsync: {ex}");
-                
-                // Fallback to the original approach if decoder doesn't accept pixel_values directly
-                Debug.WriteLine("Trying fallback approach with feature combination...");
-                return GenerateAsyncFallback(image, prompt, maxNewTokens, ct);
+                int seq = start + i;
+                for (int h = 0; h < H; h++)
+                    combined[0, seq, h] = imgArr[i * H + h];
             }
+
+            // 5) First pass: full embeddings + full-length mask/positions + empty KV
+            var attn0 = FullOnesMask(T);
+            var pos0 = PosIds(T);
+
+            const int LAYERS = 24, HEADS = 2, HEAD_DIM = 64;
+            var inputs0 = new List<NamedOnnxValue>
+            {
+                NamedOnnxValue.CreateFromTensor("inputs_embeds",  combined),
+                NamedOnnxValue.CreateFromTensor("attention_mask", attn0),
+                NamedOnnxValue.CreateFromTensor("position_ids",   pos0),
+            };
+            for (int l = 0; l < LAYERS; l++)
+            {
+                inputs0.Add(NamedOnnxValue.CreateFromTensor($"past_key_values.{l}.key", new DenseTensor<float>(new[] { 1, HEADS, 0, HEAD_DIM })));
+                inputs0.Add(NamedOnnxValue.CreateFromTensor($"past_key_values.{l}.value", new DenseTensor<float>(new[] { 1, HEADS, 0, HEAD_DIM })));
+            }
+
+            var (logits, kv) = RunDecoder(_dec, inputs0);
+            int next = ArgMaxLast(logits);
+            if (next == ImEndId) return string.Empty;
+
+            // 6) Streaming decode: IMPORTANT — attention_mask length must be (past_len + 1) each step
+            var generated = new List<int>();
+            int pastLen = T; // number of tokens already consumed by KV
+
+            for (int step = 0; step < System.Math.Max(1, maxNewTokens); step++)
+            {
+                generated.Add(next);
+                if (next == ImEndId) break;
+
+                // embed the single next id
+                var one = new DenseTensor<long>(new[] { 1, 1 }); one[0, 0] = next;
+                using var emb1 = _emb.Run(new[] { NamedOnnxValue.CreateFromTensor("input_ids", one) });
+                var embToken = AsDense(emb1.First().AsTensor<float>()); // [1,1,896]
+
+                // pos id = pastLen; attention mask = ones of length (pastLen + 1)
+                var pos = new DenseTensor<long>(new[] { 1, 1 }); pos[0, 0] = pastLen;
+                var att = FullOnesMask(pastLen + 1);
+
+                var stepInputs = new List<NamedOnnxValue>
+                {
+                    NamedOnnxValue.CreateFromTensor("inputs_embeds",  embToken),
+                    NamedOnnxValue.CreateFromTensor("attention_mask", att),
+                    NamedOnnxValue.CreateFromTensor("position_ids",   pos),
+                };
+                for (int l = 0; l < LAYERS; l++)
+                {
+                    stepInputs.Add(NamedOnnxValue.CreateFromTensor($"past_key_values.{l}.key", kv[$"past_key_values.{l}.key"]));
+                    stepInputs.Add(NamedOnnxValue.CreateFromTensor($"past_key_values.{l}.value", kv[$"past_key_values.{l}.value"]));
+                }
+
+                (logits, kv) = RunDecoder(_dec, stepInputs);
+                next = ArgMaxStream(logits, generated, repetitionPenalty: 1.1f);
+                pastLen += 1;
+            }
+
+            // 7) Decode (skip specials and byte-clean)
+            var decoded = _tok.DecodeClean(generated);
+            return decoded.Trim();
         }, ct);
     }
 
-    private string GenerateAsyncFallback(byte[] image, string prompt, int maxNewTokens, CancellationToken ct)
+    // ---- helpers ----
+
+    static DenseTensor<long> FullOnesMask(int n)
     {
-        try
-        {
-            Debug.WriteLine($"=== Fallback generation with improved approach ===");
-            
-            // 1. Process image through vision encoder FIRST to get actual feature dimensions
-            using var bmp = _image.PreprocessSourceImage(image);
-            var imgTensor = _image.GetTensorForImage(bmp);
-
-            using var encRes = _enc.Run(new[] { NamedOnnxValue.CreateFromTensor("pixel_values", imgTensor) });
-            var imgEmbTensor = encRes.First().AsTensor<float>();
-            
-            Debug.WriteLine($"Vision encoder output shape: [{string.Join("x", imgEmbTensor.Dimensions.ToArray())}]");
-            int actualImageTokens = (int)imgEmbTensor.Dimensions[1]; // Use actual sequence length
-
-            // Step 1: Apply chat template with correct number of image tokens
-            string userQuestion = prompt.Replace("<image>", "").Trim();
-            if (string.IsNullOrEmpty(userQuestion))
-                userQuestion = "Describe what you see.";
-            
-            string chatMLPrompt = "<|im_start|>system\nYou are a helpful visual AI assistant. Respond concisely and accurately to the user's query in one sentence.<|im_end|>\n" +
-                                 $"<|im_start|>user\n<image>{userQuestion}<|im_end|>\n" +
-                                 "<|im_start|>assistant\n";
-            
-            Debug.WriteLine($"Chat template applied: {chatMLPrompt}");
-            Debug.WriteLine($"Using actual image tokens from vision encoder: {actualImageTokens}");
-            
-            Debug.WriteLine($"Chat template applied: {chatMLPrompt}");
-            
-            // Step 2: Tokenize the prompt parts separately and manually insert image tokens
-            // Split the ChatML prompt around the <image> placeholder
-            const int IMAGE_TOKEN_INDEX = 151646;
-            var promptParts = chatMLPrompt.Split("<image>");
-            if (promptParts.Length != 2)
-            {
-                Debug.WriteLine("ERROR: Expected exactly one <image> placeholder in prompt");
-                return "Error: Invalid prompt format";
-            }
-            
-            // Use ACTUAL image tokens from vision encoder, not theoretical calculation
-            int numImageTokens = actualImageTokens;
-            
-            // Tokenize the text parts
-            var preImageTokens = _tok.Encode(promptParts[0]);
-            var postImageTokens = _tok.Encode(promptParts[1]);
-            
-            Debug.WriteLine($"Pre-image text tokens: {preImageTokens.Length}");
-            Debug.WriteLine($"Post-image text tokens: {postImageTokens.Length}");
-            Debug.WriteLine($"Image tokens to insert: {numImageTokens}");
-            
-            // Step 4: Manually construct the full token sequence
-            // [pre_text_tokens] + [image_token × numImageTokens] + [post_text_tokens]
-            var expandedTokens = new List<int>();
-            expandedTokens.AddRange(preImageTokens);
-            
-            // Insert the calculated number of image tokens
-            for (int i = 0; i < numImageTokens; i++)
-            {
-                expandedTokens.Add(IMAGE_TOKEN_INDEX);
-            }
-            
-            expandedTokens.AddRange(postImageTokens);
-            
-            Debug.WriteLine($"Constructed token sequence: {expandedTokens.Count} total tokens");
-            Debug.WriteLine($"Breakdown: {preImageTokens.Length} pre + {numImageTokens} image + {postImageTokens.Length} post");
-            
-            // Step 5: Find image token positions (should be contiguous block)
-            var imageTokenPositions = new List<int>();
-            for (int i = 0; i < expandedTokens.Count; i++)
-            {
-                if (expandedTokens[i] == IMAGE_TOKEN_INDEX)
-                {
-                    imageTokenPositions.Add(i);
-                }
-            }
-            
-            Debug.WriteLine($"Found {imageTokenPositions.Count} image tokens starting at position {imageTokenPositions.FirstOrDefault()}");
-            
-            if (imageTokenPositions.Count != numImageTokens)
-            {
-                Debug.WriteLine($"ERROR: Expected {numImageTokens} image tokens but found {imageTokenPositions.Count}");
-                return "Error: Image token count mismatch";
-            }
-            
-            // Split tokens around the image token (LLaVA style)
-            // Step 6: Split tokens around image token positions to prepare for embedding replacement
-            if (imageTokenPositions.Count == 0)
-            {
-                Debug.WriteLine("ERROR: No image tokens found in expanded prompt");
-                return "Error: Could not find image tokens in prompt";
-            }
-            
-            // The image tokens should be a contiguous block
-            int firstImageTokenIdx = imageTokenPositions[0];
-            int lastImageTokenIdx = imageTokenPositions[imageTokenPositions.Count - 1];
-            
-            // Verify they are contiguous
-            if (lastImageTokenIdx - firstImageTokenIdx + 1 != numImageTokens)
-            {
-                Debug.WriteLine($"WARNING: Image tokens are not contiguous! First: {firstImageTokenIdx}, Last: {lastImageTokenIdx}");
-            }
-            
-            var textTokensBeforeImage = expandedTokens.Take(firstImageTokenIdx).ToArray();
-            var textTokensAfterImage = expandedTokens.Skip(lastImageTokenIdx + 1).ToArray();
-            
-            Debug.WriteLine($"Text before image ({textTokensBeforeImage.Length}): [{string.Join(", ", textTokensBeforeImage.Take(10))}...]");
-            Debug.WriteLine($"Text after image ({textTokensAfterImage.Length}): [{string.Join(", ", textTokensAfterImage.Take(10))}...]");
-            Debug.WriteLine($"Image tokens to replace: {numImageTokens} tokens from position {firstImageTokenIdx} to {lastImageTokenIdx}");
-            
-            // Get embeddings for text parts only (no image token)
-            Tensor<float> preImageEmbeddings = null;
-            Tensor<float> postImageEmbeddings = null;
-            
-            if (textTokensBeforeImage.Length > 0)
-            {
-                var preImageTensor = new DenseTensor<long>(new[] { 1, textTokensBeforeImage.Length });
-                for (int i = 0; i < textTokensBeforeImage.Length; i++)
-                {
-                    preImageTensor[0, i] = textTokensBeforeImage[i];
-                }
-                using var preEmbRes = _emb.Run(new[] { NamedOnnxValue.CreateFromTensor("input_ids", preImageTensor) });
-                preImageEmbeddings = preEmbRes.First().AsTensor<float>();
-            }
-            
-            if (textTokensAfterImage.Length > 0)
-            {
-                var postImageTensor = new DenseTensor<long>(new[] { 1, textTokensAfterImage.Length });
-                for (int i = 0; i < textTokensAfterImage.Length; i++)
-                {
-                    postImageTensor[0, i] = textTokensAfterImage[i];
-                }
-                using var postEmbRes = _emb.Run(new[] { NamedOnnxValue.CreateFromTensor("input_ids", postImageTensor) });
-                postImageEmbeddings = postEmbRes.First().AsTensor<float>();
-            }
-            
-            // Now combine embeddings in LLaVA style: [pre_text] + [image_features] + [post_text]
-            var combinedEmbeddings = CombineEmbeddingsLlavaStyle(preImageEmbeddings, imgEmbTensor, postImageEmbeddings);
-            Debug.WriteLine($"Combined embeddings shape: [{string.Join("x", combinedEmbeddings.Dimensions.ToArray())}]");
-
-            // Use the combined embeddings directly (no separate text/image combination needed)
-            var combinedFeatures = combinedEmbeddings;
-
-            // 5. Single-step generation with ALL required inputs matching Netron specs
-            int currentSeqLen = (int)combinedFeatures.Dimensions[1];
-            
-            // attention_mask: int64[batch_size,total_sequence_length] - matches current sequence
-            var attentionMask = new DenseTensor<long>(new[] { 1, currentSeqLen });
-            for (int i = 0; i < currentSeqLen; i++) attentionMask[0, i] = 1;
-
-            // position_ids: int64[batch_size,sequence_length] - matches current sequence  
-            var positionIds = new DenseTensor<long>(new[] { 1, currentSeqLen });
-            for (int i = 0; i < currentSeqLen; i++) positionIds[0, i] = i;
-
-            // Initialize proper KV cache matching exact Netron specs
-            const int numLayers = 24; // FastVLM 0.5B has 24 layers (0-23)
-            const int numHeads = 2;   // From Netron: tensor: float32[batch_size,2,past_sequence_length,64]
-            const int headDim = 64;   // From Netron: 64 dimension
-            const int pastSeqLen = 0; // Empty cache for first generation
-            
-            var inputs = new List<NamedOnnxValue>
-            {
-                NamedOnnxValue.CreateFromTensor("inputs_embeds", combinedFeatures),
-                NamedOnnxValue.CreateFromTensor("attention_mask", attentionMask),
-                NamedOnnxValue.CreateFromTensor("position_ids", positionIds)
-            };
-
-            // Add empty KV cache for all layers exactly matching Netron specs
-            // Each layer expects: float32[batch_size,2,past_sequence_length,64]
-            for (int layer = 0; layer < numLayers; layer++)
-            {
-                var emptyKey = new DenseTensor<float>(new[] { 1, numHeads, pastSeqLen, headDim });
-                var emptyValue = new DenseTensor<float>(new[] { 1, numHeads, pastSeqLen, headDim });
-                inputs.Add(NamedOnnxValue.CreateFromTensor($"past_key_values.{layer}.key", emptyKey));
-                inputs.Add(NamedOnnxValue.CreateFromTensor($"past_key_values.{layer}.value", emptyValue));
-            }
-
-            Debug.WriteLine($"Running decoder with {inputs.Count} inputs:");
-            foreach (var input in inputs)
-            {
-                if (input.Value is Tensor<float> floatTensor)
-                {
-                    Debug.WriteLine($"- {input.Name}: [{string.Join("x", floatTensor.Dimensions.ToArray())}] (float32)");
-                }
-                else if (input.Value is Tensor<long> longTensor)
-                {
-                    Debug.WriteLine($"- {input.Name}: [{string.Join("x", longTensor.Dimensions.ToArray())}] (int64)");
-                }
-                else
-                {
-                    Debug.WriteLine($"- {input.Name}: (unknown type)");
-                }
-            }
-
-            using var decRes = _dec.Run(inputs);
-            
-            // Expected output: logits (float32[batch_size,sequence_length,151646])
-            var logits = decRes.First().AsTensor<float>();
-
-            // Get logits for the last position
-            int seqLen = (int)logits.Dimensions[1];
-            int vocabSize = (int)logits.Dimensions[2];
-            
-            Debug.WriteLine($"Decoder output logits shape: [1, {seqLen}, {vocabSize}] (expected vocab_size=151646)");
-            
-            var lastTokenLogits = new float[vocabSize];
-            for (int i = 0; i < vocabSize; i++)
-            {
-                lastTokenLogits[i] = logits[0, seqLen - 1, i];
-            }
-
-            var nextTokenId = SampleNextToken(lastTokenLogits, null);
-            
-            // Generate multiple tokens instead of just one
-            var generatedTokens = new List<int> { nextTokenId };
-            
-            Debug.WriteLine($"Step 0: Generated token {nextTokenId} = '{_tok.Decode(new[] { nextTokenId })}'");
-            
-            // For LLaVA-style generation, track all tokens that have been generated
-            // We'll extend the embeddings for each new token
-            generatedTokens.Add(nextTokenId);
-            
-            for (int step = 1; step < maxNewTokens; step++)
-            {
-                // Check for EOS token: <|im_end|> is token 151645 according to tokenizer_config.json
-                if (nextTokenId == 151645 || nextTokenId == 2) // <|im_end|> or fallback EOS
-                {
-                    Debug.WriteLine($"Generated EOS token ({nextTokenId}), stopping generation");
-                    break;
-                }
-                
-                // For subsequent tokens, we need to extend the input embeddings
-                // Get embeddings for the newly generated token
-                var newTokenTensor = new DenseTensor<long>(new[] { 1, 1 });
-                newTokenTensor[0, 0] = nextTokenId;
-                
-                using var newTokenEmbRes = _emb.Run(new[] { NamedOnnxValue.CreateFromTensor("input_ids", newTokenTensor) });
-                var newTokenEmbedding = newTokenEmbRes.First().AsTensor<float>();
-                
-                // Extend the combined features with the new token embedding
-                combinedFeatures = ExtendEmbeddings(combinedFeatures, newTokenEmbedding);
-                
-                int newSeqLen = (int)combinedFeatures.Dimensions[1];
-                var newAttentionMask = new DenseTensor<long>(new[] { 1, newSeqLen });
-                for (int i = 0; i < newSeqLen; i++) newAttentionMask[0, i] = 1;
-                
-                var newPositionIds = new DenseTensor<long>(new[] { 1, newSeqLen });
-                for (int i = 0; i < newSeqLen; i++) newPositionIds[0, i] = i;
-                
-                var newInputs = new List<NamedOnnxValue>
-                {
-                    NamedOnnxValue.CreateFromTensor("inputs_embeds", combinedFeatures),
-                    NamedOnnxValue.CreateFromTensor("attention_mask", newAttentionMask),
-                    NamedOnnxValue.CreateFromTensor("position_ids", newPositionIds)
-                };
-                
-                // Add empty KV cache again (for simplicity)
-                for (int layer = 0; layer < numLayers; layer++)
-                {
-                    var emptyKey = new DenseTensor<float>(new[] { 1, numHeads, pastSeqLen, headDim });
-                    var emptyValue = new DenseTensor<float>(new[] { 1, numHeads, pastSeqLen, headDim });
-                    newInputs.Add(NamedOnnxValue.CreateFromTensor($"past_key_values.{layer}.key", emptyKey));
-                    newInputs.Add(NamedOnnxValue.CreateFromTensor($"past_key_values.{layer}.value", emptyValue));
-                }
-                
-                using var newDecRes = _dec.Run(newInputs);
-                var newLogits = newDecRes.First().AsTensor<float>();
-                
-                int newSeqLenOut = (int)newLogits.Dimensions[1];
-                var newLastTokenLogits = new float[vocabSize];
-                for (int i = 0; i < vocabSize; i++)
-                {
-                    newLastTokenLogits[i] = newLogits[0, newSeqLenOut - 1, i];
-                }
-                
-                nextTokenId = SampleNextToken(newLastTokenLogits, generatedTokens);
-                generatedTokens.Add(nextTokenId);
-                
-                string tokenText = _tok.Decode(new[] { nextTokenId });
-                
-                Debug.WriteLine($"Step {step}: Generated token {nextTokenId} = '{tokenText}'");
-                
-                // Update generated tokens list (no need for currentTokens)
-                
-                // Stop at natural boundaries
-                if (tokenText.Contains(".") || tokenText.Contains("!") || tokenText.Contains("?"))
-                {
-                    Debug.WriteLine($"Found natural stopping point, ending generation");
-                    break;
-                }
-            }
-            
-            // Decode all generated tokens together for proper BPE handling
-            Debug.WriteLine($"Generated tokens: [{string.Join(", ", generatedTokens)}]");
-            string result = _tok.Decode(generatedTokens.ToArray()).Trim();
-            Debug.WriteLine($"Final decoded result: '{result}'");
-            
-            return result;
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Error in fallback: {ex}");
-            return $"Error: {ex.Message}";
-        }
+        var t = new DenseTensor<long>(new[] { 1, n });
+        for (int i = 0; i < n; i++) t[0, i] = 1;
+        return t;
     }
 
-    private string ApplyChatTemplate(string prompt)
+    static DenseTensor<long> PosIds(int n)
     {
-        // Simplified chat template similar to SmolVLM
-        return $"<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n";
+        var t = new DenseTensor<long>(new[] { 1, n });
+        for (int i = 0; i < n; i++) t[0, i] = i;
+        return t;
     }
 
-    private Tensor<float> CombineFeatures(Tensor<float> imageFeatures, Tensor<float> textFeatures)
+    static DenseTensor<float> AsDense(Tensor<float> t)
     {
-        // LLaVA-style feature combination: replace IMAGE_TOKEN_INDEX with image features
-        var textShape = textFeatures.Dimensions.ToArray();
-        var imgShape = imageFeatures.Dimensions.ToArray();
-        
-        Debug.WriteLine($"CombineFeatures: Text shape [{string.Join("x", textShape)}], Image shape [{string.Join("x", imgShape)}]");
-        
-        int textSeqLen = (int)textShape[1];
-        int hiddenSize = (int)textShape[2];
-        int imgSeqLen = (int)imgShape[1];
-        
-        // Find the position of IMAGE_TOKEN_INDEX (-200) in the text embeddings
-        // Since embed_tokens likely maps -200 to a special embedding, we need to replace it
-        
-        // For simplicity, assume the image token is at a known position (after BOS if present)
-        // In a real implementation, we'd scan for the special token embedding pattern
-        
-        // Calculate new sequence length: text tokens + image features - 1 (replacing image token)
-        int newSeqLen = textSeqLen + imgSeqLen - 1; // -1 because we replace the image token
-        var combined = new DenseTensor<float>(new[] { 1, newSeqLen, hiddenSize });
-        
-        // Strategy: assume IMAGE_TOKEN_INDEX is at position 1 (after any BOS token)
-        // This follows the Apple FastVLM format where <image> is early in the sequence
-        int imageTokenPos = 1;
-        if (textSeqLen > imageTokenPos)
-        {
-            // Copy text embeddings before image position
-            for (int i = 0; i < imageTokenPos; i++)
-            {
-                for (int j = 0; j < hiddenSize; j++)
-                {
-                    combined[0, i, j] = textFeatures[0, i, j];
-                }
-            }
-            
-            // Insert image features (projected to text embedding space)
-            for (int i = 0; i < imgSeqLen; i++)
-            {
-                for (int j = 0; j < hiddenSize; j++)
-                {
-                    // Use image features directly (decoder should handle projection)
-                    if (j < imgShape[2])
-                    {
-                        combined[0, imageTokenPos + i, j] = imageFeatures[0, i, j];
-                    }
-                    else
-                    {
-                        combined[0, imageTokenPos + i, j] = 0f; // Pad if needed
-                    }
-                }
-            }
-            
-            // Copy remaining text embeddings after image
-            int remainingTextStart = imageTokenPos + 1;
-            int combinedPos = imageTokenPos + imgSeqLen;
-            for (int i = remainingTextStart; i < textSeqLen; i++)
-            {
-                for (int j = 0; j < hiddenSize; j++)
-                {
-                    combined[0, combinedPos, j] = textFeatures[0, i, j];
-                }
-                combinedPos++;
-            }
-        }
-        else
-        {
-            // Fallback: simple concatenation if text is too short
-            Debug.WriteLine("Warning: Text sequence too short, using fallback concatenation");
-            return CombineFeaturesSimple(imageFeatures, textFeatures);
-        }
-        
-        Debug.WriteLine($"Combined features shape: [{string.Join("x", combined.Dimensions.ToArray())}]");
-        return combined;
-    }
-    
-    private Tensor<float> CombineFeaturesSimple(Tensor<float> imageFeatures, Tensor<float> textFeatures)
-    {
-        // Fallback: simple concatenation
-        var imgShape = imageFeatures.Dimensions.ToArray();
-        var textShape = textFeatures.Dimensions.ToArray();
-        
-        var combinedLength = imgShape[1] + textShape[1];
-        var combined = new DenseTensor<float>(new[] { 1, combinedLength, imgShape[2] });
-        
-        // Copy image features first
-        for (int i = 0; i < imgShape[1]; i++)
-        {
-            for (int j = 0; j < imgShape[2]; j++)
-            {
-                combined[0, i, j] = imageFeatures[0, i, j];
-            }
-        }
-        
-        // Copy text features
-        for (int i = 0; i < textShape[1]; i++)
-        {
-            for (int j = 0; j < Math.Min(textShape[2], imgShape[2]); j++)
-            {
-                combined[0, imgShape[1] + i, j] = textFeatures[0, i, j];
-            }
-        }
-        
-        return combined;
+        var dims = t.Dimensions.ToArray();
+        var d = new DenseTensor<float>(dims);
+        var src = t.ToArray();
+        var dst = d.Buffer.Span;
+        for (int i = 0; i < src.Length; i++) dst[i] = src[i];
+        return d;
     }
 
-    private int SampleNextToken(float[] logits, List<int> previousTokens = null)
+    static (Tensor<float>, Dictionary<string, Tensor<float>>) RunDecoder(InferenceSession dec, List<NamedOnnxValue> inputs)
     {
-        // Much more restrictive token filtering - limit to basic vocabulary
-        const int maxValidTokenId = 15000; // Reduced significantly from 32000
-        
-        // Apply repetition penalty to avoid getting stuck
-        if (previousTokens != null && previousTokens.Count > 0)
-        {
-            const float repetitionPenalty = 2.0f; // Stronger penalty
-            var recentTokens = previousTokens.TakeLast(20).ToHashSet(); // More context
-            
-            Debug.WriteLine($"Applying repetition penalty to {recentTokens.Count} recent tokens: [{string.Join(", ", recentTokens)}]");
-            
-            for (int i = 0; i < Math.Min(logits.Length, maxValidTokenId); i++)
-            {
-                if (recentTokens.Contains(i))
-                {
-                    // Stronger penalization of recent tokens
-                    logits[i] = logits[i] < 0 ? logits[i] * repetitionPenalty : logits[i] / repetitionPenalty;
-                }
-            }
-        }
+        using var res = dec.Run(inputs);
+        var arr = res.ToArray();
+        var logits = arr[0].AsTensor<float>();
+        var kv = new Dictionary<string, Tensor<float>>(System.StringComparer.Ordinal);
 
-        // Zero out tokens beyond vocab size and also filter out problematic high ID tokens
-        for (int i = maxValidTokenId; i < logits.Length; i++)
+        int idx = 1; int layer = 0;
+        while (idx + 1 < arr.Length)
         {
-            logits[i] = float.NegativeInfinity;
+            kv[$"past_key_values.{layer}.key"] = arr[idx++].AsTensor<float>();
+            kv[$"past_key_values.{layer}.value"] = arr[idx++].AsTensor<float>();
+            layer++;
         }
-        
-        // Also filter out tokens that are likely to be garbage (very high IDs within the range)
-        for (int i = 10000; i < maxValidTokenId; i++)
-        {
-            // Reduce probability of very high token IDs
-            if (logits[i] > 0)
-                logits[i] *= 0.1f; // Reduce by 90%
-        }
-
-        // Use deterministic sampling (match Apple's do_sample: false)
-        // No temperature scaling needed for deterministic output
-
-        // Convert to probabilities using softmax
-        float maxLogit = logits.Max();
-        var probs = new float[logits.Length];
-        float sum = 0f;
-        
-        for (int i = 0; i < logits.Length; i++)
-        {
-            probs[i] = (float)Math.Exp(logits[i] - maxLogit);
-            sum += probs[i];
-        }
-        
-        for (int i = 0; i < probs.Length; i++)
-        {
-            probs[i] /= sum;
-        }
-
-        // Top-k sampling but smaller k to avoid garbage tokens
-        const int topK = 20;
-        var topIndices = probs
-            .Select((prob, idx) => new { Prob = prob, Index = idx })
-            .Where(x => x.Index < maxValidTokenId) // Only valid tokens
-            .OrderByDescending(x => x.Prob)
-            .Take(topK)
-            .ToArray();
-
-        if (topIndices.Length == 0)
-        {
-            // Fallback to first valid token
-            return 0;
-        }
-
-        // Sample from top-k
-        var random = new Random();
-        float randomValue = (float)random.NextDouble();
-        float cumulative = 0f;
-        
-        // Renormalize top-k probabilities
-        float topSum = topIndices.Sum(x => x.Prob);
-        
-        foreach (var item in topIndices)
-        {
-            cumulative += item.Prob / topSum;
-            if (randomValue <= cumulative)
-            {
-                Debug.WriteLine($"Sampled token {item.Index} with prob {item.Prob:F6}");
-                return item.Index;
-            }
-        }
-        
-        // Fallback to most likely token
-        return topIndices[0].Index;
+        return (logits, kv);
     }
 
-    private bool IsValidToken(int tokenId, string tokenText)
+    static int ArgMaxLast(Tensor<float> logits) // [1,T,V]
     {
-        // Filter out tokens that are likely to be garbage
-        
-        // Reject very high token IDs (likely special tokens or garbage)
-        if (tokenId > 15000) return false;
-        
-        // Reject empty or whitespace-only tokens that might cause issues
-        if (string.IsNullOrEmpty(tokenText)) return false;
-        
-        // Reject tokens that are just weird symbols or control characters
-        if (tokenText.All(c => char.IsControl(c) || char.IsSurrogate(c))) return false;
-        
-        // Reject tokens that look like encoding artifacts (all caps fragments without vowels)
-        if (tokenText.Length > 2 && tokenText.All(char.IsUpper) && 
-            !tokenText.Any(c => "AEIOU".Contains(c)) && 
-            tokenText.All(char.IsLetter))
+        int T = (int)logits.Dimensions[1];
+        int V = (int)logits.Dimensions[2];
+        int best = 0; float mb = float.NegativeInfinity;
+        for (int i = 0; i < V; i++)
         {
-            return false;
+            float v = logits[0, T - 1, i];
+            if (v > mb) { mb = v; best = i; }
         }
-        
-        return true;
+        return best;
     }
 
-    /// <summary>
-    /// Extends existing embeddings with a new token embedding
-    /// </summary>
-    private DenseTensor<float> ExtendEmbeddings(DenseTensor<float> existingEmbeddings, Tensor<float> newTokenEmbedding)
+    static int ArgMaxStream(Tensor<float> logits /* [1,1,V] */, List<int> recent, float repetitionPenalty)
     {
-        int existingLength = (int)existingEmbeddings.Dimensions[1];
-        int hiddenSize = (int)existingEmbeddings.Dimensions[2];
-        int newLength = existingLength + 1;
-        
-        var extended = new DenseTensor<float>(new[] { 1, newLength, hiddenSize });
-        
-        // Copy existing embeddings
-        var existingArray = existingEmbeddings.ToArray();
-        var newArray = newTokenEmbedding.ToArray();
-        
-        for (int seq = 0; seq < existingLength; seq++)
-        {
-            for (int hidden = 0; hidden < hiddenSize; hidden++)
-            {
-                extended[0, seq, hidden] = existingArray[seq * hiddenSize + hidden];
-            }
-        }
-        
-        // Add new token embedding at the end
-        for (int hidden = 0; hidden < hiddenSize; hidden++)
-        {
-            extended[0, existingLength, hidden] = newArray[hidden];
-        }
-        
-        Debug.WriteLine($"Extended embeddings from {existingLength} to {newLength} tokens");
-        return extended;
-    }
+        int V = (int)logits.Dimensions[2];
+        int best = 0; float mb = float.NegativeInfinity;
+        var seen = recent.Count > 64 ? recent.Skip(recent.Count - 64).ToHashSet() : recent.ToHashSet();
 
-    /// <summary>
-    /// Combines embeddings in LLaVA style: [pre_text] + [image_features] + [post_text]
-    /// </summary>
-    private DenseTensor<float> CombineEmbeddingsLlavaStyle(Tensor<float> preTextEmbeddings, Tensor<float> imageFeatures, Tensor<float> postTextEmbeddings)
-    {
-        var embeddingParts = new List<Tensor<float>>();
-        int totalLength = 0;
-        int hiddenSize = (int)imageFeatures.Dimensions[2]; // Should be 896 for FastVLM
-        
-        // Add pre-text embeddings if present
-        if (preTextEmbeddings != null && preTextEmbeddings.Dimensions[1] > 0)
+        for (int i = 0; i < V; i++)
         {
-            embeddingParts.Add(preTextEmbeddings);
-            totalLength += (int)preTextEmbeddings.Dimensions[1];
-            Debug.WriteLine($"Added pre-text embeddings: {preTextEmbeddings.Dimensions[1]} tokens");
+            float v = logits[0, 0, i];
+            if (seen.Contains(i)) v = v < 0 ? v * repetitionPenalty : v / repetitionPenalty;
+            if (v > mb) { mb = v; best = i; }
         }
-        
-        // Add image features - these replace the <image> token
-        embeddingParts.Add(imageFeatures);
-        totalLength += (int)imageFeatures.Dimensions[1];
-        Debug.WriteLine($"Added image features: {imageFeatures.Dimensions[1]} visual tokens");
-        
-        // Add post-text embeddings if present  
-        if (postTextEmbeddings != null && postTextEmbeddings.Dimensions[1] > 0)
-        {
-            embeddingParts.Add(postTextEmbeddings);
-            totalLength += (int)postTextEmbeddings.Dimensions[1];
-            Debug.WriteLine($"Added post-text embeddings: {postTextEmbeddings.Dimensions[1]} tokens");
-        }
-        
-        // Create combined tensor
-        var combined = new DenseTensor<float>(new[] { 1, totalLength, hiddenSize });
-        int currentPos = 0;
-        
-        foreach (var part in embeddingParts)
-        {
-            var partLength = (int)part.Dimensions[1];
-            var partArray = part.ToArray();
-            
-            for (int seq = 0; seq < partLength; seq++)
-            {
-                for (int hidden = 0; hidden < hiddenSize; hidden++)
-                {
-                    combined[0, currentPos + seq, hidden] = partArray[seq * hiddenSize + hidden];
-                }
-            }
-            currentPos += partLength;
-        }
-        
-        Debug.WriteLine($"Combined embeddings: {totalLength} total tokens, {hiddenSize} hidden size");
-        return combined;
+        return best;
     }
 
     public void Dispose()
