@@ -19,8 +19,8 @@ namespace PoopDetector.Views
         private PoopCameraViewModel _viewModel;
 
         bool playing = false;
-        bool debug = true;
-        bool benchmark = true;
+        bool debug = false;
+        bool benchmark = false;
 
         public PoopCameraPage()
         {

@@ -22,11 +22,21 @@ public partial class VisionModelManager : ObservableObject
     [ObservableProperty] bool _isDownloading;
 
     // --------------  public API  ------------------------------- //
-    public async Task ChangeModelAsync(ModelTypes type,
-                                       CancellationToken cancel = default)
+    public async Task ChangeModelAsync(ModelTypes type)
     {
+        await ChangeModelAsync(type, "", CancellationToken.None);
+    }
+
+    public async Task ChangeModelAsync(ModelTypes type, CancellationToken cancel)
+    {
+        await ChangeModelAsync(type, "", cancel);
+    }
+
+    public async Task ChangeModelAsync(ModelTypes type, string modelVariant, CancellationToken cancel = default)
+    {
+        var cacheKey = (type, modelVariant);
         if (CurrentModel is not null &&
-            _cache.TryGetValue(type, out var ready) &&
+            _variantCache.TryGetValue(cacheKey, out var ready) &&
             ready == CurrentModel)
             return;      // already active
 
@@ -37,22 +47,25 @@ public partial class VisionModelManager : ObservableObject
         {
             if (type == ModelTypes.FastVLM05B)
             {
-                string dec = await EnsureFastVlmInt8Async(new Progress<double>(p => DownloadProgress = p), cancel);
-                CurrentModel = new FastVLM.FastVlm(
-                    // Prefer fp16 encoder to avoid ConvInteger kernel issues
-                    Path.Combine(FileSystem.Current.AppDataDirectory, "vision_encoder_fp16.onnx"),
-                    Path.Combine(FileSystem.Current.AppDataDirectory, "embed_tokens_int8.onnx"),
-                    Path.Combine(FileSystem.Current.AppDataDirectory, "decoder_model_merged_int8.onnx"),
+                string dec = await EnsureFastVlmVariantAsync(modelVariant, new Progress<double>(p => DownloadProgress = p), cancel);
+                
+                // Get the file paths based on the variant
+                var (embedPath, decoderPath) = GetFastVlmFilePaths(modelVariant);
+                
+                CurrentModel = await FastVLM.FastVlmSimple.CreateAsync(
+                    Path.Combine(FileSystem.Current.AppDataDirectory, "vision_encoder.onnx"),
+                    embedPath,
+                    decoderPath,
                     Path.Combine(FileSystem.Current.AppDataDirectory, "vocab.json"),
                     Path.Combine(FileSystem.Current.AppDataDirectory, "merges.txt"),
-                    Path.Combine(FileSystem.Current.AppDataDirectory, "tokenizer.json"));
-                _cache[type] = CurrentModel;
+                    cancel);
+                _variantCache[cacheKey] = CurrentModel;
             }
             else
             {
                 string localPath = await EnsureModelFileAsync(type, cancel);
                 CurrentModel = CreateVisionWrapper(type, localPath);
-                _cache[type] = CurrentModel;
+                _variantCache[cacheKey] = CurrentModel;
             }
         }
         catch (Exception ex)
@@ -67,21 +80,71 @@ public partial class VisionModelManager : ObservableObject
             IsDownloading = false;
         }
     }
-    static async Task<string> EnsureFastVlmInt8Async(IProgress<double> progress, CancellationToken ct)
+    
+
+    static async Task<string> EnsureFastVlmTypedAsync(IProgress<double> progress, CancellationToken ct, string type = "q4f16")
     {
-        // Download 4 artifacts and advance progress by quarters
-        double baseProg = 0;
-        void ReportPart(double part) => progress.Report(baseProg + 0.25 * part);
+        // Download different model variants based on type parameter
+        // type: "" = full precision, "q4f16" = mixed, "f16" = all fp16, "int8" = all int8
+        
         string root = "https://huggingface.co/onnx-community/FastVLM-0.5B-ONNX/resolve/main/";
-        _ = await ModelCache.GetAsync(root + "onnx/vision_encoder_fp16.onnx", "vision_encoder_fp16.onnx", new Progress<double>(ReportPart), ct);
-        baseProg = 0.25;
-        _ = await ModelCache.GetAsync(root + "onnx/embed_tokens_int8.onnx", "embed_tokens_int8.onnx", new Progress<double>(ReportPart), ct);
-        baseProg = 0.50;
-        string dec = await ModelCache.GetAsync(root + "onnx/decoder_model_merged_int8.onnx", "decoder_model_merged_int8.onnx", new Progress<double>(ReportPart), ct);
-        baseProg = 0.75;
-        _ = await ModelCache.GetAsync(root + "merges.txt", "merges.txt", new Progress<double>(ReportPart), ct);
-        _ = await ModelCache.GetAsync(root + "vocab.json", "vocab.json", new Progress<double>(ReportPart), ct);
-        _ = await ModelCache.GetAsync(root + "tokenizer.json", "tokenizer.json", new Progress<double>(ReportPart), ct);
+        
+        // Determine file suffixes based on type
+        string visionSuffix, embedSuffix, decoderSuffix;
+        switch (type)
+        {
+            case "": // Full precision
+                visionSuffix = "";
+                embedSuffix = "";
+                decoderSuffix = "";
+                break;
+            case "q4f16": // Mixed precision (current default)
+                visionSuffix = "q4f16";
+                embedSuffix = "q4f16";
+                decoderSuffix = "q4f16";
+                break;
+            case "f16": // All FP16
+                visionSuffix = "_fp16";
+                embedSuffix = "_fp16";
+                decoderSuffix = "_fp16";
+                break;
+            case "int8": // All INT8
+                visionSuffix = "int8"; // Vision stays fp16 even in int8 mode
+                embedSuffix = "_int8";
+                decoderSuffix = "_int8";
+                break;
+            default:
+                throw new ArgumentException($"Unknown FastVLM type: {type}");
+        }
+
+        // Build file names
+        string visionFile = $"vision_encoder{visionSuffix}.onnx";
+        string embedFile = $"embed_tokens{embedSuffix}.onnx";
+        string decoderFile = $"decoder_model_merged{decoderSuffix}.onnx";
+        
+        // Download 6 files total, so each gets 1/6 of progress
+        const int totalFiles = 6;
+        double fileProgress = 1.0 / totalFiles;
+        
+        // Download all files with proper progress reporting
+        _ = await ModelCache.GetAsync(root + "onnx/" + visionFile, visionFile, 
+            new Progress<double>(p => progress.Report(0 * fileProgress + p * fileProgress)), ct);
+            
+        _ = await ModelCache.GetAsync(root + "onnx/" + embedFile, embedFile, 
+            new Progress<double>(p => progress.Report(1 * fileProgress + p * fileProgress)), ct);
+            
+        string dec = await ModelCache.GetAsync(root + "onnx/" + decoderFile, decoderFile, 
+            new Progress<double>(p => progress.Report(2 * fileProgress + p * fileProgress)), ct);
+            
+        _ = await ModelCache.GetAsync(root + "merges.txt", "merges.txt", 
+            new Progress<double>(p => progress.Report(3 * fileProgress + p * fileProgress)), ct);
+            
+        _ = await ModelCache.GetAsync(root + "vocab.json", "vocab.json", 
+            new Progress<double>(p => progress.Report(4 * fileProgress + p * fileProgress)), ct);
+            
+        _ = await ModelCache.GetAsync(root + "tokenizer.json", "tokenizer.json", 
+            new Progress<double>(p => progress.Report(5 * fileProgress + p * fileProgress)), ct);
+            
         progress.Report(1.0);
         return dec; // return any; wrapper will resolve others from AppDataDirectory
     }
@@ -130,6 +193,46 @@ public partial class VisionModelManager : ObservableObject
     }
     // --------------  internals  -------------------------------- //
     readonly ConcurrentDictionary<ModelTypes, IVision> _cache = new();
+    readonly ConcurrentDictionary<(ModelTypes, string), IVision> _variantCache = new();
+
+    static async Task<string> EnsureFastVlmVariantAsync(string variant, IProgress<double> progress, CancellationToken ct)
+    {
+        return await EnsureFastVlmTypedAsync(progress, ct, variant);
+    }
+
+    static (string embedPath, string decoderPath) GetFastVlmFilePaths(string variant)
+    {
+        // Determine file suffixes based on variant
+        string embedSuffix, decoderSuffix;
+        switch (variant)
+        {
+            case "": // Full precision
+                embedSuffix = "";
+                decoderSuffix = "";
+                break;
+            case "mixed":
+            case "q4f16": // Mixed precision (current default)
+                embedSuffix = "_int8";
+                decoderSuffix = "_int8";
+                break;
+            case "f16": // All FP16
+                embedSuffix = "_fp16";
+                decoderSuffix = "_fp16";
+                break;
+            case "int8": // All INT8
+                embedSuffix = "_int8";
+                decoderSuffix = "_int8";
+                break;
+            default:
+                throw new ArgumentException($"Unknown FastVLM variant: {variant}");
+        }
+
+        string embedFile = $"embed_tokens{embedSuffix}.onnx";
+        string decoderFile = $"decoder_model_merged{decoderSuffix}.onnx";
+        
+        return (Path.Combine(FileSystem.Current.AppDataDirectory, embedFile),
+                Path.Combine(FileSystem.Current.AppDataDirectory, decoderFile));
+    }
 
     static async Task<string> EnsureModelFileAsync(ModelTypes t,
                                                    CancellationToken ct)
@@ -235,6 +338,16 @@ public partial class VisionModelManager : ObservableObject
         if (CurrentModel is FastVLM.IVisualLanguageModel vlm)
             return await vlm.GenerateAsync(image, prompt, maxNewTokens, cancel);
         throw new InvalidOperationException("Current model is not a VLM");
+    }
+
+    /// <summary>
+    /// Helper method to quickly test different FastVLM model variants
+    /// </summary>
+    public async Task TestFastVlmVariantAsync(string variant, byte[] testImage, string prompt = "What do you see in this image?", CancellationToken cancel = default)
+    {
+        await ChangeModelAsync(ModelTypes.FastVLM05B, variant, cancel);
+        string result = await AnalyzeWithVlmAsync(testImage, prompt, 20, cancel);
+        System.Diagnostics.Debug.WriteLine($"FastVLM variant '{variant}' result: {result}");
     }
 
     /// <summary>

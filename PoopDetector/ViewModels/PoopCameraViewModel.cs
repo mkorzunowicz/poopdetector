@@ -119,7 +119,8 @@ public partial class PoopCameraViewModel : ObservableObject
 
     // --------- FastVLM prompt + output (one-shot) ---------
     [ObservableProperty]
-    private string promptText = "You are a vision assistant. Answer strictly JSON with keys: feces:boolean, confidence:number, explanation:string. Question: Does this image contain visible feces?";
+    private string promptText = "Describe what you see";
+    //private string promptText = "You are a vision assistant. Answer strictly JSON with keys: feces:boolean, confidence:number, explanation:string. Question: Does this image contain visible feces?";
 
     [ObservableProperty]
     private string lastVlmJson;

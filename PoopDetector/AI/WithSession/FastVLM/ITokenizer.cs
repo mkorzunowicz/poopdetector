@@ -8,5 +8,7 @@ internal interface ITokenizer
     string Decode(IReadOnlyList<int> tokens);
     int EosId { get; }
     int BosId { get; }
+    bool ContainsImageToken(int[] tokens);
+    int[] EncodeWithImageToken(string text);
 }
 
