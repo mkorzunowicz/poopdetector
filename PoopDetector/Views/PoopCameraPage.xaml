@@ -18,7 +18,7 @@
         </ResourceDictionary>
     </ContentPage.Resources>
 
-    <Grid HorizontalOptions="Fill" VerticalOptions="Fill" RowDefinitions="*,80,56">
+    <Grid HorizontalOptions="Fill" VerticalOptions="Fill" RowDefinitions="*,Auto,80,56">
         <!-- 
             If no cameras are available, show a message. 
             Otherwise, we show the rest of the camera UI.
@@ -258,8 +258,46 @@
             </Grid>
         </VerticalStackLayout>
 
+        <!-- Progressive AI Response Display -->
+        <Border Grid.Row="1" 
+                BackgroundColor="#CC000000" 
+                Stroke="LightGray" 
+                StrokeThickness="1"
+                Margin="10,5"
+                Padding="10"
+                IsVisible="{Binding ShouldShowAnswerBox}">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="8"/>
+            </Border.StrokeShape>
+            <Grid RowDefinitions="Auto,*">
+                <!-- Header with close button -->
+                <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,5">
+                    <Label Text="AI Response" 
+                           TextColor="White" 
+                           FontSize="12" 
+                           FontAttributes="Bold"
+                           VerticalOptions="Center"/>
+                    <Button Grid.Column="1" 
+                            Text="✕" 
+                            FontSize="14"
+                            WidthRequest="30" 
+                            HeightRequest="30"
+                            BackgroundColor="Transparent"
+                            TextColor="White"
+                            Command="{Binding ClearVlmResponseCommand}"/>
+                </Grid>
+                <!-- Response content -->
+                <ScrollView Grid.Row="1" MaximumHeightRequest="200">
+                    <Label Text="{Binding ProgressiveResponse}" 
+                           TextColor="White"
+                           FontSize="14"
+                           LineBreakMode="WordWrap"/>
+                </ScrollView>
+            </Grid>
+        </Border>
+
         <!-- Prompt + Analyze (VLM) small bar -->
-        <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Padding="8" BackgroundColor="#22000000">
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Padding="0" BackgroundColor="#22000000">
             <Entry Placeholder="Enter prompt for VLM"
                    Text="{Binding PromptText}"
                    TextColor="White"/>
@@ -267,7 +305,7 @@
                     Command="{Binding AnalyzeWithVlmCommand}"
                     BackgroundColor="{StaticResource Primary}"/>
         </Grid>
-        <Grid Background="#A6000000" HorizontalOptions="Fill" VerticalOptions="Fill" IsVisible="{Binding SamRunning}">
+        <Grid Background="#A6000000" HorizontalOptions="Fill" VerticalOptions="Fill" IsVisible="{Binding SamRunning}" Grid.Row="0" Grid.RowSpan="4">
         <ActivityIndicator  Color="Aqua" IsRunning="True" />
 
         </Grid>

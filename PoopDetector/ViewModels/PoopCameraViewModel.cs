@@ -125,6 +125,34 @@ public partial class PoopCameraViewModel : ObservableObject
     [ObservableProperty]
     private string lastVlmJson;
 
+    // --------- Progressive Response Display ---------
+    [ObservableProperty]
+    private string progressiveResponse = "";
+
+    [ObservableProperty]
+    private bool isGeneratingResponse = false;
+
+    // Property to control when answer box should be visible
+    public bool ShouldShowAnswerBox => IsGeneratingResponse && !string.IsNullOrWhiteSpace(ProgressiveResponse);
+
+    // Override property change to notify ShouldShowAnswerBox changes
+    partial void OnProgressiveResponseChanged(string value)
+    {
+        OnPropertyChanged(nameof(ShouldShowAnswerBox));
+    }
+
+    partial void OnIsGeneratingResponseChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShouldShowAnswerBox));
+    }
+
+    [RelayCommand]
+    private void ClearVlmResponse()
+    {
+        IsGeneratingResponse = false;
+        ProgressiveResponse = "";
+    }
+
     [RelayCommand]
     private async Task AnalyzeWithVlm()
     {
@@ -133,6 +161,10 @@ public partial class PoopCameraViewModel : ObservableObject
             if (VisionModelManager.Instance.CurrentModel == null)
                 return;
 
+            // Show progressive response UI and reset previous content
+            IsGeneratingResponse = true;
+            ProgressiveResponse = "🤔 Analyzing image...";
+
             // capture single frame
             Stream stream;
             if (DeviceInfo.Platform == DevicePlatform.Android || DeviceInfo.Platform == DevicePlatform.iOS)
@@ -140,24 +172,44 @@ public partial class PoopCameraViewModel : ObservableObject
             else
                 stream = await _cameraView.TakePhotoAsync(Camera.MAUI.ImageFormat.JPEG);
 
-            if (stream == null) return;
+            if (stream == null) 
+            {
+                IsGeneratingResponse = false;
+                return;
+            }
+            
             using var ms = new MemoryStream();
             await stream.CopyToAsync(ms);
 
-            var json = await VisionModelManager.Instance.AnalyzeWithVlmAsync(ms.ToArray(), PromptText, 16);
-            LastVlmJson = json;
+            // Use streaming API with callback to update progressive response
+            await VisionModelManager.Instance.AnalyzeWithVlmStreamAsync(
+                ms.ToArray(), 
+                PromptText, 
+                400,
+                (partialResponse) =>
+                {
+                    // Update UI on main thread
+                    MainThread.BeginInvokeOnMainThread(() =>
+                    {
+                        ProgressiveResponse = partialResponse;
+                    });
+                }
+            );
 
-            // also show a quick dialog for convenience
-            if (Application.Current?.MainPage != null)
-                await Application.Current.MainPage.DisplayAlert("VLM Result", json, "OK");
+            
+            // Final result
+            LastVlmJson = ProgressiveResponse;
+            
+            // Keep the progressive response visible - user can manually dismiss or start new analysis
+            // IsGeneratingResponse remains true to keep the response visible
         }
         catch (Exception ex)
         {
             LastVlmJson = $"{DateTime.Now:o} error: {ex.Message}";
+            ProgressiveResponse = $"Error: {ex.Message}";
+            // Keep IsGeneratingResponse true to show the error message
         }
-    }
-
-    // ────────────────────────── prediction storage ──────────────
+    }    // ────────────────────────── prediction storage ──────────────
     public PredictionResult CurrentPrediction { get; private set; }
     public List<PredictionResult> LastPredictions { get; } = new(5);
 

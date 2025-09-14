@@ -1,122 +1,175 @@
+using System.Text.Json;
 using Microsoft.ML.Tokenizers;
-using System.Text;
+using System.Diagnostics;
 
 namespace PoopDetector.AI.Vision.FastVLM;
 
-/// GPT-2 BPE with manual ChatML specials and a "byte-clean" decoder to remove Ċ/Ġ/byte-glyphs.
-internal sealed class HfTokenizer 
+/// Thin wrapper around Microsoft.ML.Tokenizers loading from tokenizer.json using Tokenizer.FromFile.
+internal sealed class HfTokenizer : ITokenizer
 {
-    // ChatML / Qwen2 specials
-    public const int EndOfTextId = 151643;   // <|endoftext|>
-    public const int ImStartId = 151644;   // <|im_start|>
-    public const int ImEndId = 151645;   // <|im_end|>
-    public const int ImageId = 151646;   // <image>
+    readonly Tokenizer _tokenizer;
+    readonly int _eosId;
+    readonly int _bosId;
 
-    private readonly Tokenizer _bpe;
-
-    public int EosId => ImEndId;
-    public int BosId => ImStartId;
+    public int EosId => _eosId;
+    public int BosId => _bosId;
 
     public HfTokenizer(string vocabPath, string mergesPath)
     {
-        // Keep the (vocab, merges) order you verified.
-        _bpe = BpeTokenizer.Create(vocabPath, mergesPath);
+        _tokenizer = BpeTokenizer.Create(vocabPath, mergesPath);
+        
+        // Use the known token IDs from FastVLM tokenizer_config.json
+        // Don't try to encode these as the BPE tokenizer won't recognize them as single tokens
+        _eosId = 151645; // <|im_end|>
+        _bosId = 151644; // <|im_start|>
+        
+        Debug.WriteLine($"Using EOS ID: {_eosId} (<|im_end|>), BOS ID: {_bosId} (<|im_start|>)");
     }
 
-    // Plain encode (no specials processed)
-    public int[] Encode(string text) => _bpe.EncodeToIds(text).ToArray();
-
-    // ChatML prompt with a SINGLE <image> (to be expanded later)
-    public List<int> TokenizeChatWithSingleImage(string system, string user, bool addGenerationPrompt)
+    public int[] Encode(string text)
     {
-        var ids = new List<int>();
-        // <|im_start|>system\n{system}<|im_end|>\n
-        ids.Add(ImStartId);
-        ids.AddRange(EncodePlain("system\n"));
-        ids.AddRange(EncodePlain(system));
-        ids.Add(ImEndId);
-        ids.AddRange(EncodePlain("\n"));
-        // <|im_start|>user\n<image>{user}<|im_end|>\n
-        ids.Add(ImStartId);
-        ids.AddRange(EncodePlain("user\n"));
-        ids.Add(ImageId);
-        ids.AddRange(EncodePlain(user.Replace("<image>", "")));
-        ids.Add(ImEndId);
-        ids.AddRange(EncodePlain("\n"));
-        if (addGenerationPrompt)
+        // Handle special tokens manually since they're not in the BPE vocab
+        var processedText = text;
+        var specialTokens = new Dictionary<string, int>
         {
-            // <|im_start|>assistant\n
-            ids.Add(ImStartId);
-            ids.AddRange(EncodePlain("assistant\n"));
+            {"<|im_start|>", 151644},
+            {"<|im_end|>", 151645},
+            {"<image>", 151646},
+            {"<|endoftext|>", 151643}
+        };
+        
+        var result = new List<int>();
+        var currentPos = 0;
+        
+        while (currentPos < processedText.Length)
+        {
+            bool foundSpecialToken = false;
+            
+            // Check for special tokens at current position
+            foreach (var (token, id) in specialTokens)
+            {
+                if (processedText.Substring(currentPos).StartsWith(token))
+                {
+                    result.Add(id);
+                    currentPos += token.Length;
+                    foundSpecialToken = true;
+                    break;
+                }
+            }
+            
+            if (!foundSpecialToken)
+            {
+                // Find the end of regular text (until next special token or end)
+                int nextSpecialPos = processedText.Length;
+                foreach (var (token, _) in specialTokens)
+                {
+                    int pos = processedText.IndexOf(token, currentPos);
+                    if (pos >= 0 && pos < nextSpecialPos)
+                    {
+                        nextSpecialPos = pos;
+                    }
+                }
+                
+                // Encode the regular text portion
+                if (nextSpecialPos > currentPos)
+                {
+                    var regularText = processedText.Substring(currentPos, nextSpecialPos - currentPos);
+                    var regularTokens = _tokenizer.EncodeToIds(regularText);
+                    result.AddRange(regularTokens);
+                    currentPos = nextSpecialPos;
+                }
+                else
+                {
+                    // Single character that's not part of a special token
+                    var singleChar = processedText.Substring(currentPos, 1);
+                    var singleTokens = _tokenizer.EncodeToIds(singleChar);
+                    result.AddRange(singleTokens);
+                    currentPos++;
+                }
+            }
         }
-        return ids;
+        
+        return result.ToArray();
     }
-
-    // Expand the single <image> marker to N contiguous image tokens
-    public List<int> ExpandSingleImageToken(List<int> input, int nImageTokens)
+    public string Decode(IReadOnlyList<int> tokens) 
     {
-        int idx = input.FindIndex(t => t == ImageId);
-        if (idx < 0) throw new InvalidOperationException("No <image> token found in the sequence.");
-        var outIds = new List<int>(input.Count - 1 + nImageTokens);
-        outIds.AddRange(input.Take(idx));
-        for (int i = 0; i < nImageTokens; i++) outIds.Add(ImageId);
-        outIds.AddRange(input.Skip(idx + 1));
-        return outIds;
+        // Handle special tokens manually
+        var specialTokens = new Dictionary<int, string>
+        {
+            {151644, "<|im_start|>"},
+            {151645, "<|im_end|>"},
+            {151646, "<image>"},
+            {151643, "<|endoftext|>"}
+        };
+        
+        var result = new List<string>();
+        var regularTokens = new List<int>();
+        
+        foreach (var token in tokens)
+        {
+            if (specialTokens.ContainsKey(token))
+            {
+                // First decode any accumulated regular tokens
+                if (regularTokens.Count > 0)
+                {
+                    var decoded = _tokenizer.Decode(regularTokens);
+                    var cleaned = decoded.Replace("Ġ", " ").Replace("Ċ", "\n");
+                    result.Add(cleaned);
+                    regularTokens.Clear();
+                }
+                
+                // Add the special token
+                result.Add(specialTokens[token]);
+            }
+            else
+            {
+                // Accumulate regular tokens
+                regularTokens.Add(token);
+            }
+        }
+        
+        // Decode any remaining regular tokens
+        if (regularTokens.Count > 0)
+        {
+            var decoded = _tokenizer.Decode(regularTokens);
+            var cleaned = decoded.Replace("Ġ", " ").Replace("Ċ", "\n");
+            result.Add(cleaned);
+        }
+        
+        var finalResult = string.Join("", result);
+        
+        // Remove any double spaces and trim
+        while (finalResult.Contains("  ")) finalResult = finalResult.Replace("  ", " ");
+        return finalResult.Trim();
     }
-
-    // Locate the contiguous image block
-    public (int start, int length) FindImageTokenBlock(List<int> tokens)
+    
+    public bool ContainsImageToken(int[] tokens)
     {
-        int start = tokens.FindIndex(t => t == ImageId);
-        if (start < 0) return (-1, 0);
-        int i = start;
-        while (i < tokens.Count && tokens[i] == ImageId) i++;
-        return (start, i - start);
+        // Check if the token sequence contains the image token (151646)
+        return tokens.Contains(151646);
     }
-
-    // Default decode (kept for compatibility)
-    public string Decode(IReadOnlyList<int> tokens) => _bpe.Decode(tokens);
-
-    // Clean decode: skip specials and byte-clean GPT-2 glyphs (Ġ → space, Ċ → newline, etc.)
-    public string DecodeClean(IReadOnlyList<int> tokens)
+    
+    public int[] EncodeWithImageToken(string text)
     {
-        var filtered = tokens.Where(t => t != EndOfTextId && t != ImStartId && t != ImEndId && t != ImageId).ToArray();
-        if (filtered.Length == 0) return string.Empty;
-
-        // Start with ML.Tokenizers decode (fast), then byte-clean common GPT-2 artifacts.
-        var s = _bpe.Decode(filtered);
-
-        // Common whitespace artifacts
-        s = s.Replace("Ġ", " ").Replace("Ċ", "\n");
-
-        // Byte-glyph cleanup: map Latin-1 lookalikes back down to bytes when they appear in pairs like "Ã©" → "é"
-        // This simple pass fixes most "Ã", "Â", etc. cases without a full GPT-2 byte map.
-        s = FixUtf8Artifacts(s);
-
-        // Collapse multiple spaces
-        while (s.Contains("  ")) s = s.Replace("  ", " ");
-
-        return s.Trim();
-    }
-
-    // ---- internals ----
-
-    private int[] EncodePlain(string text) => _bpe.EncodeToIds(text).ToArray();
-
-    /// <summary>
-    /// Heuristic UTF-8 artifact fixer (handles common sequences like "Ã©" → "é", "Â·" → "·", etc.).
-    /// This avoids shipping a 256-entry GPT-2 byte table and is sufficient for normal English outputs.
-    /// </summary>
-    private static string FixUtf8Artifacts(string input)
-    {
-        // Quick bail-out if nothing suspicious
-        if (input.IndexOf('Ã') < 0 && input.IndexOf('Â') < 0) return input;
-
-        // Interpret the string as if it contained mis-decoded UTF-8 sequences.
-        // Convert to bytes with Latin-1, then back to UTF-8.
-        // This trick turns "Ã©" into the single Unicode "é", etc.
-        var latin1 = Encoding.GetEncoding("ISO-8859-1");
-        var bytes = latin1.GetBytes(input);
-        return Encoding.UTF8.GetString(bytes);
+        // Try to encode the text and manually replace <image> with the correct token
+        var tokens = Encode(text);
+        var result = new List<int>();
+        
+        // Convert token sequence back to check for <image> text
+        for (int i = 0; i < tokens.Length; i++)
+        {
+            var tokenText = _tokenizer.Decode(new[] { tokens[i] });
+            if (tokenText.Contains("<image>"))
+            {
+                // Replace with the actual image token
+                result.Add(151646);
+            }
+            else
+            {
+                result.Add(tokens[i]);
+            }
+        }
+        
+        return result.ToArray();
     }
 }

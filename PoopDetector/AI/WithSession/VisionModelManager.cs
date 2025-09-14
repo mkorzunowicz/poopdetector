@@ -24,7 +24,7 @@ public partial class VisionModelManager : ObservableObject
     // --------------  public API  ------------------------------- //
     public async Task ChangeModelAsync(ModelTypes type)
     {
-        await ChangeModelAsync(type, "", CancellationToken.None);
+        await ChangeModelAsync(type, "int8", CancellationToken.None);
     }
 
     public async Task ChangeModelAsync(ModelTypes type, CancellationToken cancel)
@@ -49,15 +49,16 @@ public partial class VisionModelManager : ObservableObject
             {
                 string dec = await EnsureFastVlmVariantAsync(modelVariant, new Progress<double>(p => DownloadProgress = p), cancel);
                 
-                // Get the file paths based on the variant
-                var (embedPath, decoderPath) = GetFastVlmFilePaths(modelVariant);
+                // Get all file paths based on the variant
+                var (visionEncoderPath, embedPath, decoderPath) = GetFastVlmFilePaths(modelVariant);
                 
-                CurrentModel = await FastVLM.FastVlmSimple.CreateAsync(
-                    Path.Combine(FileSystem.Current.AppDataDirectory, "vision_encoder.onnx"),
+                CurrentModel = await FastVLM.FastVlm.CreateAsync(
+                    visionEncoderPath,
                     embedPath,
                     decoderPath,
-                    Path.Combine(FileSystem.Current.AppDataDirectory, "vocab.json"),
-                    Path.Combine(FileSystem.Current.AppDataDirectory, "merges.txt"),
+                    Path.Combine(FileSystem.Current.AppDataDirectory, "tokenizer.json"),
+                    //Path.Combine(FileSystem.Current.AppDataDirectory, "vocab.json"),
+                    //Path.Combine(FileSystem.Current.AppDataDirectory, "merges.txt"),
                     cancel);
                 _variantCache[cacheKey] = CurrentModel;
             }
@@ -85,7 +86,7 @@ public partial class VisionModelManager : ObservableObject
     static async Task<string> EnsureFastVlmTypedAsync(IProgress<double> progress, CancellationToken ct, string type = "q4f16")
     {
         // Download different model variants based on type parameter
-        // type: "" = full precision, "q4f16" = mixed, "f16" = all fp16, "int8" = all int8
+        // Supports: "", q4f16, fp16, int8, q4, bnb4, quantized
         
         string root = "https://huggingface.co/onnx-community/FastVLM-0.5B-ONNX/resolve/main/";
         
@@ -93,40 +94,60 @@ public partial class VisionModelManager : ObservableObject
         string visionSuffix, embedSuffix, decoderSuffix;
         switch (type)
         {
-            case "": // Full precision
+            case "": // Full precision (original)
                 visionSuffix = "";
                 embedSuffix = "";
                 decoderSuffix = "";
                 break;
             case "q4f16": // Mixed precision (current default)
-                visionSuffix = "q4f16";
-                embedSuffix = "q4f16";
-                decoderSuffix = "q4f16";
+                visionSuffix = "_q4f16";
+                embedSuffix = "_q4f16";
+                decoderSuffix = "_q4f16";
                 break;
+            case "fp16":
             case "f16": // All FP16
                 visionSuffix = "_fp16";
                 embedSuffix = "_fp16";
                 decoderSuffix = "_fp16";
                 break;
             case "int8": // All INT8
-                visionSuffix = "int8"; // Vision stays fp16 even in int8 mode
+                visionSuffix = "_fp16"; // Vision encoder typically stays fp16
                 embedSuffix = "_int8";
                 decoderSuffix = "_int8";
                 break;
+            case "q4": // 4-bit quantized
+                visionSuffix = "_q4";
+                embedSuffix = "_q4";
+                decoderSuffix = "_q4";
+                break;
+            case "bnb4": // BitsAndBytes 4-bit
+            // smalles working combo
+                visionSuffix = "_bnb4";
+                // embedSuffix = "_bnb4";
+                // decoderSuffix = "_bnb4";
+                embedSuffix = "_int8";
+                decoderSuffix = "_int8";
+                break;
+            case "quantized": // Generic quantized
+            // seems fastest
+                visionSuffix = "_quantized";
+                embedSuffix = "_quantized";
+                decoderSuffix = "_quantized";
+                break;
             default:
-                throw new ArgumentException($"Unknown FastVLM type: {type}");
+                throw new ArgumentException($"Unknown FastVLM variant: {type}. Supported variants: '', 'q4f16', 'fp16', 'int8', 'q4', 'bnb4', 'quantized'");
         }
 
-        // Build file names
+        // Build file names - keep variant-specific names for all files
         string visionFile = $"vision_encoder{visionSuffix}.onnx";
         string embedFile = $"embed_tokens{embedSuffix}.onnx";
         string decoderFile = $"decoder_model_merged{decoderSuffix}.onnx";
         
-        // Download 6 files total, so each gets 1/6 of progress
+        // Download files with variant-specific names to avoid overwriting
         const int totalFiles = 6;
         double fileProgress = 1.0 / totalFiles;
         
-        // Download all files with proper progress reporting
+        // Download vision encoder with variant-specific name
         _ = await ModelCache.GetAsync(root + "onnx/" + visionFile, visionFile, 
             new Progress<double>(p => progress.Report(0 * fileProgress + p * fileProgress)), ct);
             
@@ -200,37 +221,60 @@ public partial class VisionModelManager : ObservableObject
         return await EnsureFastVlmTypedAsync(progress, ct, variant);
     }
 
-    static (string embedPath, string decoderPath) GetFastVlmFilePaths(string variant)
+    static (string visionEncoderPath, string embedPath, string decoderPath) GetFastVlmFilePaths(string variant)
     {
         // Determine file suffixes based on variant
-        string embedSuffix, decoderSuffix;
+        // Supports: "", q4f16, fp16, int8, q4, bnb4, quantized
+        string visionSuffix, embedSuffix, decoderSuffix;
         switch (variant)
         {
-            case "": // Full precision
+            case "": // Full precision (original)
+                visionSuffix = "";
                 embedSuffix = "";
                 decoderSuffix = "";
                 break;
             case "mixed":
             case "q4f16": // Mixed precision (current default)
-                embedSuffix = "_int8";
-                decoderSuffix = "_int8";
+                visionSuffix = "_q4f16";
+                embedSuffix = "_q4f16";
+                decoderSuffix = "_q4f16";
                 break;
+            case "fp16":
             case "f16": // All FP16
+                visionSuffix = "_fp16";
                 embedSuffix = "_fp16";
                 decoderSuffix = "_fp16";
                 break;
             case "int8": // All INT8
+                visionSuffix = "_fp16"; // Vision encoder typically stays fp16
                 embedSuffix = "_int8";
                 decoderSuffix = "_int8";
                 break;
+            case "q4": // 4-bit quantized
+                visionSuffix = "_q4";
+                embedSuffix = "_q4";
+                decoderSuffix = "_q4";
+                break;
+            case "bnb4": // BitsAndBytes 4-bit - using your working combo
+                visionSuffix = "_bnb4";
+                embedSuffix = "_int8";  // Use int8 embeddings (your fix)
+                decoderSuffix = "_int8"; // Use int8 decoder (your fix)
+                break;
+            case "quantized": // Generic quantized
+                visionSuffix = "_quantized";
+                embedSuffix = "_quantized";
+                decoderSuffix = "_quantized";
+                break;
             default:
-                throw new ArgumentException($"Unknown FastVLM variant: {variant}");
+                throw new ArgumentException($"Unknown FastVLM variant: {variant}. Supported variants: '', 'mixed', 'q4f16', 'fp16', 'int8', 'q4', 'bnb4', 'quantized'");
         }
 
+        string visionFile = $"vision_encoder{visionSuffix}.onnx";
         string embedFile = $"embed_tokens{embedSuffix}.onnx";
         string decoderFile = $"decoder_model_merged{decoderSuffix}.onnx";
         
-        return (Path.Combine(FileSystem.Current.AppDataDirectory, embedFile),
+        return (Path.Combine(FileSystem.Current.AppDataDirectory, visionFile),
+                Path.Combine(FileSystem.Current.AppDataDirectory, embedFile),
                 Path.Combine(FileSystem.Current.AppDataDirectory, decoderFile));
     }
 
@@ -335,9 +379,18 @@ public partial class VisionModelManager : ObservableObject
     // Simple helper to route VLM prompts when the active model supports it
     public async Task<string> AnalyzeWithVlmAsync(byte[] image, string prompt, int maxNewTokens = 12, CancellationToken cancel = default)
     {
-        if (CurrentModel is FastVLM.IVisualLanguageModel vlm)
+        if (CurrentModel is FastVLM.FastVlm vlm)
             return await vlm.GenerateAsync(image, prompt, maxNewTokens, cancel);
         throw new InvalidOperationException("Current model is not a VLM");
+    }
+
+    // Streaming version that calls onTokenGenerated for each new token
+    public async Task AnalyzeWithVlmStreamAsync(byte[] image, string prompt, int maxNewTokens, Action<string> onTokenGenerated, CancellationToken cancel = default)
+    {
+        if (CurrentModel is FastVLM.FastVlm vlm)
+            await vlm.GenerateStreamAsync(image, prompt, maxNewTokens, onTokenGenerated, cancel);
+        else
+            throw new InvalidOperationException("Current model is not a streaming VLM");
     }
 
     /// <summary>
@@ -348,6 +401,40 @@ public partial class VisionModelManager : ObservableObject
         await ChangeModelAsync(ModelTypes.FastVLM05B, variant, cancel);
         string result = await AnalyzeWithVlmAsync(testImage, prompt, 20, cancel);
         System.Diagnostics.Debug.WriteLine($"FastVLM variant '{variant}' result: {result}");
+    }
+
+    /// <summary>
+    /// Get all available FastVLM model variants
+    /// </summary>
+    public static string[] GetAvailableFastVlmVariants()
+    {
+        return new string[] 
+        { 
+            "",        // Full precision (original)
+            "q4f16",   // Mixed precision (default)
+            "fp16",    // All FP16
+            "int8",    // All INT8
+            "q4",      // 4-bit quantized
+            "bnb4",    // BitsAndBytes 4-bit
+            "quantized" // Generic quantized
+        };
+    }
+
+    /// <summary>
+    /// Get human-readable descriptions for FastVLM variants
+    /// </summary>
+    public static Dictionary<string, string> GetFastVlmVariantDescriptions()
+    {
+        return new Dictionary<string, string>
+        {
+            [""] = "Full Precision (Original) - Highest quality, largest size",
+            ["q4f16"] = "Q4F16 Mixed Precision - Good balance of speed/quality (Default)",
+            ["fp16"] = "Half Precision (FP16) - Faster inference, moderate size",
+            ["int8"] = "8-bit Integer - Fast inference, smaller size",
+            ["q4"] = "4-bit Quantized - Very fast, compact size",
+            ["bnb4"] = "BitsAndBytes 4-bit - Optimized 4-bit quantization",
+            ["quantized"] = "Generic Quantized - General purpose quantization"
+        };
     }
 
     /// <summary>

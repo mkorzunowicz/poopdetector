@@ -185,7 +185,7 @@ namespace PoopDetector.Views
             _viewModel.Cameras.Clear();
             if (cameraView.Cameras.Count == 0)
             {
-                // no cameras => the �No cameras available� label will show from the VM
+                // no cameras => the  No cameras available  label will show from the VM
                 return;
             }
 
@@ -302,7 +302,7 @@ namespace PoopDetector.Views
         private async Task GetVisionPrediction(Stream stream)
         {
             // Skip continuous inference when a VLM is active; handled by Analyze button
-            if (VisionModelManager.Instance.CurrentModel is PoopDetector.AI.Vision.FastVLM.IVisualLanguageModel)
+            if (VisionModelManager.Instance.CurrentModel is PoopDetector.AI.Vision.FastVLM.FastVlm)
             {
                 await Task.Delay(50);
                 return;
