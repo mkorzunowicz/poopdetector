@@ -2,18 +2,17 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Identity.Client;
-using SignInMaui.MSALClient;
 using System.Diagnostics;
 
 namespace PoopDetector.ViewModel;
 
 public partial class LoginViewModel : ObservableObject
 {
-    public string Id => PublicClientSingleton.Instance.MSALClientHelper.AuthResult.UniqueId;
+    public string Id => "user";
 
     public bool SignedIn
     {
-        get => PublicClientSingleton.Instance.MSALClientHelper.AuthResult != null;
+        get => true;
     }
 
     [RelayCommand]
@@ -27,7 +26,6 @@ public partial class LoginViewModel : ObservableObject
     {
         try
         {
-            var result = await PublicClientSingleton.Instance.MSALClientHelper.SignInUserAndAcquireAccessToken(["openid", "profile", "email"]);
 
             OnPropertyChanged(nameof(SignedIn));
             // Handle successful authentication here

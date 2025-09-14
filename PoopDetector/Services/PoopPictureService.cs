@@ -1,5 +1,4 @@
 ﻿using PoopDetector.AI;
-using SignInMaui.MSALClient;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -44,17 +43,17 @@ namespace PoopDetector.Services
                     location = await Geolocation.GetLocationAsync(new GeolocationRequest(GeolocationAccuracy.High, TimeSpan.FromSeconds(10)));
                 }
 
-                if (PublicClientSingleton.Instance.MSALClientHelper.AuthResult == null)
-                {
-                    await Task.Run(PublicClientSingleton.Instance.AcquireTokenSilentAsync);
-                }
+                //if (PublicClientSingleton.Instance.MSALClientHelper.AuthResult == null)
+                //{
+                //    await Task.Run(PublicClientSingleton.Instance.AcquireTokenSilentAsync);
+                //}
 
                 // Prepare picture data
                 var picture = new PoopPicture()
                 {
                     File = result.InputImage,
                     Status = "Pending",
-                    UserId = PublicClientSingleton.Instance.MSALClientHelper.AuthResult.UniqueId,
+                    UserId = "user",
                     DateTime = DateTime.Now,
                     SubmissionType = SubmissionType.BeforeCleanup,
                     BoundingBoxes = result.BoundingBoxesToJson()
