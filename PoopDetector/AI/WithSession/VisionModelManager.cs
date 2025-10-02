@@ -20,6 +20,9 @@ public partial class VisionModelManager : ObservableObject
     // --------------  progress binding properties  -------------- //
     [ObservableProperty] double _downloadProgress;  // 0-1
     [ObservableProperty] bool _isDownloading;
+    [ObservableProperty] bool _isVlmModelLoaded;
+    
+    private ModelTypes? _currentModelType;
 
     // --------------  public API  ------------------------------- //
     public async Task ChangeModelAsync(ModelTypes type)
@@ -61,12 +64,16 @@ public partial class VisionModelManager : ObservableObject
                     //Path.Combine(FileSystem.Current.AppDataDirectory, "merges.txt"),
                     cancel);
                 _variantCache[cacheKey] = CurrentModel;
+                _currentModelType = type;
+                IsVlmModelLoaded = true;
             }
             else
             {
                 string localPath = await EnsureModelFileAsync(type, cancel);
                 CurrentModel = CreateVisionWrapper(type, localPath);
                 _variantCache[cacheKey] = CurrentModel;
+                _currentModelType = type;
+                IsVlmModelLoaded = false;
             }
         }
         catch (Exception ex)
