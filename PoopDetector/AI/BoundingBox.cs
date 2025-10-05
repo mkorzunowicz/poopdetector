@@ -17,10 +17,10 @@ public class PredictionResult
 {
     public async Task RunSamEncode()
     {
-        if (VisionModelManager.Instance.MobileSam == null) return;
+        if (VisionModelManager.Instance.ActiveSam == null) return;
 
         var sw = Stopwatch.StartNew();
-        await VisionModelManager.Instance.MobileSam.EncodeAsync(InputImage);
+        await VisionModelManager.Instance.ActiveSam.EncodeAsync(InputImage);
         Debug.WriteLine($"Encode took {sw.ElapsedMilliseconds} ms");
     }
     public async void ClearSamPoints()
@@ -31,14 +31,14 @@ public class PredictionResult
     public async Task RunSamDecode(PointF point = default)
     {
         // NOTE: making polygons out of the mask runs out of memory and kills the app if the mask is too big..
-        if (VisionModelManager.Instance.MobileSam == null) return;
+        if (VisionModelManager.Instance.ActiveSam == null) return;
         var sw = Stopwatch.StartNew();
-        if (!VisionModelManager.Instance.MobileSam.CanDecode) return;
+        if (!VisionModelManager.Instance.ActiveSam.CanDecode) return;
         SKBitmap mask256;
         if (!point.IsEmpty)
         {
             PreviousPoints.Add(point);
-            mask256 = VisionModelManager.Instance.MobileSam.DecodeWithPoints(PreviousPoints);
+            mask256 = VisionModelManager.Instance.ActiveSam.DecodeWithPoints(PreviousPoints);
             Debug.WriteLine($"Decode took {sw.ElapsedMilliseconds} ms");
             sw.Restart();
 
@@ -48,7 +48,7 @@ public class PredictionResult
             Debug.WriteLine($"Mask to polygons took {sw.ElapsedMilliseconds} ms");
             return;
         }
-        var enc = VisionModelManager.Instance.MobileSam.ImageProcessor
+        var enc = VisionModelManager.Instance.ActiveSam
                       .GetEncoderSize(new Size(OriginalWidth, OriginalHeight));
 
         if (BoundingBoxes != null && BoundingBoxes.Count > 0)
@@ -71,7 +71,7 @@ public class PredictionResult
 
             // Therefore we go for a point in the middle of the box
             PreviousPoints = new List<PointF> { new((float)xmid, (float)ymid) };
-            mask256 = VisionModelManager.Instance.MobileSam.DecodeWithPoints(PreviousPoints);
+            mask256 = VisionModelManager.Instance.ActiveSam.DecodeWithPoints(PreviousPoints);
             Debug.WriteLine($"Decode took {sw.ElapsedMilliseconds} ms");
         }
         else
@@ -79,14 +79,14 @@ public class PredictionResult
             // no box -> single click in the centre
             PreviousPoints = new List<PointF> { new((float)enc.Width / 2f, (float)enc.Height / 2f) };
             //var centre = new List<PointF> { new(OriginalWidth / 2f, OriginalHeight / 2f) };
-            mask256 = VisionModelManager.Instance.MobileSam.DecodeWithPoints(PreviousPoints);
+            mask256 = VisionModelManager.Instance.ActiveSam.DecodeWithPoints(PreviousPoints);
             Debug.WriteLine($"Decode took {sw.ElapsedMilliseconds} ms");
         }
         MaskBitmaps = [mask256];
 
         sw.Restart();
-        //MaskToPolygon();
-        //Debug.WriteLine($"Mask to polygons took {sw.ElapsedMilliseconds} ms");
+        MaskToPolygon();
+        Debug.WriteLine($"Mask to polygons took {sw.ElapsedMilliseconds} ms");
 
     }
     public List<List<int>> Polygons { get; private set; }

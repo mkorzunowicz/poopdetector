@@ -1,5 +1,5 @@
-﻿// ------------------------------------------------------------
-//  MobileSam.cs
+// ------------------------------------------------------------
+//  RepVitSam.cs
 // ------------------------------------------------------------
 
 using System.Drawing;
@@ -10,22 +10,33 @@ using SkiaSharp;
 
 using PointF = Microsoft.Maui.Graphics.PointF;
 using Size = Microsoft.Maui.Graphics.Size;
-namespace PoopDetector.AI.Vision.MobileSam
+
+namespace PoopDetector.AI.Vision.RepVitSam
 {
     /// <summary>
-    /// Two-stage MobileSAM wrapper:
+    /// Two-stage RepViT-SAM wrapper:
     ///   • EncodeAsync(byte[])  → runs the encoder and stores embeddings
     ///   • DecodeWithPoints / DecodeWithBox → runs the decoder on those embeddings
+    ///   
+    /// Key differences from MobileSAM:
+    ///   • Fixed 1024×1024 input size (no adaptive scaling)
+    ///   • Input tensor name is "x" instead of default
+    ///   • Based on RepViT architecture from THU-MIG/RepViT
     /// </summary>
-    public sealed class MobileSam
-        : DoubleVisionBase<MobileSamImageProcessor>, IDisposable, ISamModel
+    public sealed class RepVitSam
+        : DoubleVisionBase<RepVitSamImageProcessor>, IDisposable, ISamModel
     {
-        private const string EncoderOnnx = "mobile_sam_encoder.onnx"; // ~1700-1900ms
-        private const string DecoderOnnx = "mobile_sam_decoder.onnx"; //Android 4200ms but seems more accurate, after another run it went down to 5700ms, but it's ways less choppy than EdgeSAM
+        //private const string EncoderOnnx = "repvit_sam_image_encoder.onnx"; //~1700-1900 // a bit more accurate
+        //private const string DecoderOnnx = "repvit_sam_image_decoder.onnx";
+        //private const string EncoderOnnx = "repvit_sam_encoder_quantized.onnx"; // ~ 1700-2000 more on the higher side, seems like the coordinates are not working
+        //private const string DecoderOnnx = "repvit_sam_decoder_quantized.onnx"; // Android ~~7000-9000, still something off with the coordinates, but works if it will hit the right spot
 
-        public MobileSam()
-            : base("MobileSAMEncoder", EncoderOnnx,
-                   "MobileSAMDecoder", DecoderOnnx)
+        private const string EncoderOnnx = "repvit_sam_encoder.onnx"; //~1600-2000
+        private const string DecoderOnnx = "repvit_sam_decoder.onnx"; // Android Up to 12000ms and sometimes the BB doesn't hit
+
+        public RepVitSam()
+            : base("RepVitSAMEncoder", EncoderOnnx,
+                   "RepVitSAMDecoder", DecoderOnnx)
         { }
 
         // --------------------------------------------------------------------
@@ -33,30 +44,29 @@ namespace PoopDetector.AI.Vision.MobileSam
         // --------------------------------------------------------------------
         private float[] _embedding;          // [1,256,64,64]
         private Size _origSize;            // original camera frame
-        private Size _encSize;             // (w_res,h_res) long-side-1024
+        private const int ImageSize = 1024;  // RepViT-SAM uses fixed 1024×1024
 
         private const int EmbeddingC = 256;
         private const int EmbeddingH = 64;
         private const int EmbeddingW = 64;
-        public bool CanDecode => _embedding != null;
         
+        public bool CanDecode => _embedding != null;
+
         // --------------------------------------------------------------------
         // GetEncoderSize for ISamModel interface
+        // Since RepVitSam uses fixed 1024×1024, return that
         // --------------------------------------------------------------------
-        public Size GetEncoderSize(Size originalSize) => 
-            ImageProcessor.GetEncoderSize(originalSize);
+        public Size GetEncoderSize(Size originalSize) => new Size(ImageSize, ImageSize);
 
         // --------------------------------------------------------------------
         // Step 1 – Encoder
         // --------------------------------------------------------------------
         public async Task EncodeAsync(byte[] jpegOrPng)
         {
-            //ImageProcessor.OriginalSize = _origSize = new Size(width, height);
             await InitializeAsync().ConfigureAwait(false);
 
             using SKBitmap bmp = ImageProcessor.PreprocessSourceImage(jpegOrPng);
             _origSize = new Size(bmp.Width, bmp.Height);
-            _encSize = ImageProcessor.GetEncoderSize(_origSize);
 
             Tensor<float> imgTensor = ImageProcessor.GetTensorForImage(bmp);
 
@@ -68,10 +78,6 @@ namespace PoopDetector.AI.Vision.MobileSam
             });
 
             _embedding = res.First().AsTensor<float>().ToArray();
-            //Debug.WriteLine($"emb len {_embedding.Length}");
-            //for (int i = 0; i < 10; i++)
-            //    Debug.Write($"{_embedding[i]} ");
-            //Debug.WriteLine($"[MobileSAM] encoder OK – embedding len {_embedding.Length}");
         }
 
         // --------------------------------------------------------------------
@@ -82,12 +88,12 @@ namespace PoopDetector.AI.Vision.MobileSam
         {
             if (_embedding == null)
                 throw new InvalidOperationException("Call EncodeAsync first.");
-            _origSize = _encSize;
+
             var inputs = ImageProcessor.BuildDecoderInputs(
-                _embedding, points, _encSize, _encSize);
+                _embedding, points, _origSize);
 
             using var res = Session2.Run(inputs);
-            return ImageProcessor.PostprocessMask(res, threshold);
+            return ImageProcessor.PostprocessMask(res, _origSize, threshold);
         }
 
         // --------------------------------------------------------------------
@@ -100,14 +106,14 @@ namespace PoopDetector.AI.Vision.MobileSam
                 throw new InvalidOperationException("Call EncodeAsync first.");
 
             var inputs = ImageProcessor.BuildDecoderInputs(
-                _embedding, box, _encSize, _origSize);
+                _embedding, box, _origSize);
 
             using var res = Session2.Run(inputs);
-            return ImageProcessor.PostprocessMask(res, threshold);
+            return ImageProcessor.PostprocessMask(res, _origSize, threshold);
         }
 
         // --------------------------------------------------------------------
-        //  we don’t use the one-shot OnProcessImageAsync in this model
+        //  we don't use the one-shot OnProcessImageAsync in this model
         // --------------------------------------------------------------------
         protected override Task<ImageProcessingResult>
             OnProcessImageAsync(byte[] image) =>
@@ -116,8 +122,8 @@ namespace PoopDetector.AI.Vision.MobileSam
 
         public void Dispose()
         {
-            Session.Dispose();
-            Session2.Dispose();
+            Session?.Dispose();
+            Session2?.Dispose();
         }
     }
 }

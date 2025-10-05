@@ -45,27 +45,53 @@ namespace PoopDetector.Views
         private async void OnFrozenTapped(object sender, TappedEventArgs e)
         {
             if (_viewModel.CurrentPrediction == null || _viewModel.SamRunning) return;
+            
+            var activeSam = VisionModelManager.Instance.ActiveSam;
+            if (activeSam is null) return;
 
-            // position inside the image control
-            var p = e.GetPosition(frozenImage);
+            // position inside the image control (includes padding/letterboxing)
+            var p = e.GetPosition(frozenImage.Parent);
             if (p == null) return;
             if (p.Value.X < 0 || p.Value.Y < 0) return;
 
-            var enc = VisionModelManager.Instance.MobileSam.ImageProcessor
-                          .GetEncoderSize(new Microsoft.Maui.Graphics.Size(_viewModel.CurrentPrediction.OriginalWidth, _viewModel.CurrentPrediction.OriginalHeight));
-            // map from control space -> original pixel space
-            var sx = enc.Width / frozenImage.Width;
-            var sy = enc.Height / frozenImage.Height;
+            var origWidth = _viewModel.CurrentPrediction.OriginalWidth;
+            var origHeight = _viewModel.CurrentPrediction.OriginalHeight;
 
-            double scale = Math.Max(sx, sy);
-            // TODO: fix the outside image frame click
-            var x_enc = p.Value.X * scale;
-            var y_enc = p.Value.Y * scale;
+            // Calculate how the image is displayed (same logic as OnMaskPaintSurface)
+            // The image is scaled to fit, maintaining aspect ratio
+            float scaleImg = (float)Math.Min(
+                frozenImage.Width / origWidth,
+                frozenImage.Height / origHeight);
+            
+            // Calculate the offset due to letterboxing/pillarboxing
+            float displayedWidth = origWidth * scaleImg;
+            float displayedHeight = origHeight * scaleImg;
+            float offX = ((float)frozenImage.Width - displayedWidth) / 2f;
+            float offY = ((float)frozenImage.Height - displayedHeight) / 2f;
 
-            //Debug.WriteLine($"scale: ({sx}, {sy} ) cam: ({p.Value.X},{p.Value.Y}) mask:({frozenImage.Width},{frozenImage.Height})");
+            // Adjust tap position to remove the padding offset
+            float adjustedX = (float)p.Value.X - offX;
+            float adjustedY = (float)p.Value.Y - offY;
 
-            _viewModel.CurrentPrediction.RunSamDecode(
-                    new Microsoft.Maui.Graphics.PointF((float)x_enc, (float)y_enc));
+            // Check if tap is outside the actual image area
+            if (adjustedX < 0 || adjustedY < 0 || adjustedX > displayedWidth || adjustedY > displayedHeight)
+            {
+                Debug.WriteLine($"Tap outside image area: ({adjustedX}, {adjustedY})");
+                return;
+            }
+
+            // Now map from displayed image space to encoder space
+            // Get encoder size from either MobileSam or RepVitSam
+            var encSize = activeSam.GetEncoderSize(
+                new Microsoft.Maui.Graphics.Size(_viewModel.CurrentPrediction.OriginalWidth, _viewModel.CurrentPrediction.OriginalHeight));
+           
+            float x_enc = (adjustedX / displayedWidth) * (float)encSize.Width;
+            float y_enc = (adjustedY / displayedHeight) * (float)encSize.Height;
+
+            Debug.WriteLine($"Tap: control=({p.Value.X};{p.Value.Y}) adjusted=({adjustedX};{adjustedY}) encoder=({x_enc};{y_enc}) offset=({offX};{offY})");
+
+            await _viewModel.CurrentPrediction.RunSamDecode(
+                    new Microsoft.Maui.Graphics.PointF(x_enc, y_enc));
 
             _viewModel.SamResultReady = true;          // trigger repaint
 
@@ -113,7 +139,7 @@ namespace PoopDetector.Views
 
             // canvas.Restore();
 
-            if (false && pr?.Polygons?.Count > 0)
+            if (pr?.Polygons?.Count > 0)
             {
                 // We need to scale the polygons back to the mask size, as we alerady scaled it to the image
                 float sx2 = (float)mask.Width / pr.OriginalWidth;

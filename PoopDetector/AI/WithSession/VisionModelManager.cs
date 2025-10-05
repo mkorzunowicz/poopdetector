@@ -16,6 +16,36 @@ public partial class VisionModelManager : ObservableObject
 
     public IVision? CurrentModel { get; private set; }
     public MobileSam.MobileSam? MobileSam { get; private set; }
+    public RepVitSam.RepVitSam? RepVitSam { get; private set; }
+    public EdgeSam.EdgeSam? EdgeSam { get; private set; }
+
+    // Active SAM model - easy switching between implementations
+    private SamModelType _activeSamType = SamModelType.EdgeSam;
+    
+    public enum SamModelType
+    {
+        MobileSam,
+        RepVitSam,
+        EdgeSam
+    }
+    
+    /// <summary>
+    /// Gets the currently active SAM model
+    /// </summary>
+    public ISamModel? ActiveSam => _activeSamType switch
+    {
+        SamModelType.MobileSam => MobileSam,
+        SamModelType.RepVitSam => RepVitSam,
+        SamModelType.EdgeSam => EdgeSam,
+        _ => MobileSam
+    };
+    
+    /// <summary>
+    /// Switch between SAM implementations
+    /// </summary>
+    public void UseMobileSam() => _activeSamType = SamModelType.MobileSam;
+    public void UseRepVitSam() => _activeSamType = SamModelType.RepVitSam;
+    public void UseEdgeSam() => _activeSamType = SamModelType.EdgeSam;
 
     // --------------  progress binding properties  -------------- //
     [ObservableProperty] double _downloadProgress;  // 0-1
@@ -185,6 +215,9 @@ public partial class VisionModelManager : ObservableObject
     public async Task EnsureDefaultModelAsync()
     {
         MobileSam = new MobileSam.MobileSam();
+        RepVitSam = new RepVitSam.RepVitSam();
+        EdgeSam = new EdgeSam.EdgeSam();
+        
         if (_bootstrapped || CurrentModel is not null) return;
 
         // file name cached in AppData

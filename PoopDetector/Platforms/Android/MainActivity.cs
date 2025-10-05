@@ -3,7 +3,6 @@ using Android.Content;
 using Android.Content.PM;
 using Android.OS;
 using Microsoft.Identity.Client;
-using SignInMaui.MSALClient;
 
 namespace PoopDetector
 {
@@ -16,10 +15,10 @@ namespace PoopDetector
             base.OnCreate(savedInstanceState);
             // configure platform specific params
             //PlatformConfig.Instance.RedirectUri = $"msal{PublicClientSingleton.Instance.MSALClientHelper.AzureAdB2CConfig.ClientId}://auth";
-            PlatformConfig.Instance.ParentWindow = this;
+            //PlatformConfig.Instance.ParentWindow = this;
 
             // Initialize MSAL and platformConfig is set
-            _ = Task.Run(async () => await PublicClientSingleton.Instance.MSALClientHelper.InitializePublicClientAppAsync()).Result;
+            //_ = Task.Run(async () => await PublicClientSingleton.Instance.MSALClientHelper.InitializePublicClientAppAsync()).Result;
         }
         protected override void OnActivityResult(int requestCode, Result resultCode, Intent data)
         {

@@ -128,17 +128,37 @@ internal static class Utils
     /// <param name="origH">original frame height (before padding / resize)</param>
     /// <returns>List&lt;float[]&gt; – each float[] is a polygon</returns>
     public static List<float[]> MaskToCocoPolygons(SKBitmap mask,
-                                                   int origW, int origH)
+                                                   int origW, int origH,
+                                                   int maxMaskSize = 256,
+                                                   int minBlobArea = 50)
     {
         var polys = new List<float[]>();
 
-        int w = mask.Width;
-        int h = mask.Height;
-        var pix = mask.Bytes;               // Gray8 bytes
+        // OPTIMIZATION 1: Downsample large masks to maxMaskSize for faster processing
+        SKBitmap workingMask = mask;
+        float scaleX = 1f, scaleY = 1f;
+        
+        if (mask.Width > maxMaskSize || mask.Height > maxMaskSize)
+        {
+            float scale = Math.Min((float)maxMaskSize / mask.Width, 
+                                   (float)maxMaskSize / mask.Height);
+            int newW = (int)(mask.Width * scale);
+            int newH = (int)(mask.Height * scale);
+            
+            var info = new SKImageInfo(newW, newH, SKColorType.Gray8, SKAlphaType.Opaque);
+            workingMask = mask.Resize(info, SKFilterQuality.Low) ?? mask;
+            
+            scaleX = (float)mask.Width / newW;
+            scaleY = (float)mask.Height / newH;
+        }
+
+        int w = workingMask.Width;
+        int h = workingMask.Height;
+        var pix = workingMask.Bytes;               // Gray8 bytes
 
         bool[,] visited = new bool[h, w];
 
-        // 4-direction flood-fill to find connected components, then trace outer
+        // 4-direction flood-fill to find connected components
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
             {
@@ -167,20 +187,26 @@ internal static class Utils
                     }
                 }
 
-                // trace outer contour of the blob (simple Graham scan for convex hull
-                // is usually enough for stool-shaped blobs – replace by more precise
-                // marching-squares if you need full detail)
+                // OPTIMIZATION 2: Skip small blobs to reduce noise
+                if (blob.Count < minBlobArea) continue;
+
+                // Convex hull for fast approximation
                 var hull = ConvexHull(blob);
 
-                // map hull coords → original image space
+                // Map hull coords → original image space
+                // Account for downsampling scale + original aspect ratio
                 var seg = new float[hull.Count * 2];
                 for (int i = 0; i < hull.Count; i++)
                 {
-                    seg[2 * i + 0] = (float)hull[i].X / (float)w * origW;
-                    seg[2 * i + 1] = (float)hull[i].Y / (float)h * origH;
+                    seg[2 * i + 0] = (float)((hull[i].X * scaleX) / mask.Width * origW);
+                    seg[2 * i + 1] = (float)((hull[i].Y * scaleY) / mask.Height * origH);
                 }
                 polys.Add(seg);
             }
+
+        // Cleanup downsampled mask if we created one
+        if (workingMask != mask)
+            workingMask.Dispose();
 
         return polys;
     }
