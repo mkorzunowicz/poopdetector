@@ -123,16 +123,6 @@
                 IsVisible="{Binding TorchOn, Converter={StaticResource InvertedBoolConverter}}"
                 Source="flash_on.png"
                 WidthRequest="40"/>
-            <!--<Image
-                HeightRequest="40"
-                IsVisible="{Binding TorchOn}"
-                Source="icon_lightbulb_green.png"
-                WidthRequest="40"/>
-            <Image
-                HeightRequest="40"
-                IsVisible="{Binding TorchOn, Converter={StaticResource InvertedBoolConverter}}"
-                Source="icon_lightbulb.png"
-                WidthRequest="40"/>-->
         </Grid>
 
         <!-- The “frozen” image if the user paused or took a picture -->
@@ -258,19 +248,18 @@
             </Grid>
         </VerticalStackLayout>
 
-        <!-- Progressive AI Response Display -->
+        <!-- Progressive AI Response Display - Updated bindings to use VlmHelper -->
         <Border Grid.Row="1" 
                 BackgroundColor="#CC000000" 
                 Stroke="LightGray" 
                 StrokeThickness="1"
                 Margin="10,5"
                 Padding="10"
-                IsVisible="{Binding ShouldShowAnswerBox}">
+                IsVisible="{Binding VlmHelper.ShouldShowAnswerBox}">
             <Border.StrokeShape>
                 <RoundRectangle CornerRadius="8"/>
             </Border.StrokeShape>
             <Grid RowDefinitions="Auto,*">
-                <!-- Header with close button -->
                 <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,5">
                     <Label Text="AI Response" 
                            TextColor="White" 
@@ -284,11 +273,10 @@
                             HeightRequest="30"
                             BackgroundColor="Transparent"
                             TextColor="White"
-                            Command="{Binding ClearVlmResponseCommand}"/>
+                            Command="{Binding VlmHelper.ClearVlmResponseCommand}"/>
                 </Grid>
-                <!-- Response content -->
                 <ScrollView Grid.Row="1" MaximumHeightRequest="200">
-                    <Label Text="{Binding ProgressiveResponse}" 
+                    <Label Text="{Binding VlmHelper.ProgressiveResponse}" 
                            TextColor="White"
                            FontSize="14"
                            LineBreakMode="WordWrap"/>
@@ -296,18 +284,18 @@
             </Grid>
         </Border>
 
-        <!-- Prompt + Analyze (VLM) small bar -->
+        <!-- Prompt + Analyze (VLM) - Updated bindings to use VlmHelper -->
         <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Padding="0" BackgroundColor="#22000000"
               IsVisible="{Binding Source={x:Static local:VisionModelManager.Instance}, Path=IsVlmModelLoaded}">
             <Entry Placeholder="Enter prompt for VLM"
-                   Text="{Binding PromptText}"
+                   Text="{Binding VlmHelper.PromptText}"
                    TextColor="White"/>
             <Button Grid.Column="1" Text="Analyze"
-                    Command="{Binding AnalyzeWithVlmCommand}"
+                    Command="{Binding VlmHelper.AnalyzeWithVlmCommand}"
                     BackgroundColor="{StaticResource Primary}"/>
         </Grid>
         <Grid Background="#A6000000" HorizontalOptions="Fill" VerticalOptions="Fill" IsVisible="{Binding SamRunning}" Grid.Row="0" Grid.RowSpan="4">
-        <ActivityIndicator  Color="Aqua" IsRunning="True" />
+            <ActivityIndicator  Color="Aqua" IsRunning="True" />
 
         </Grid>
     </Grid>

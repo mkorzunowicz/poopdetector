@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Maui.Networking;
 using PoopDetector.AI;
 using PoopDetector.AI.Vision;
+using PoopDetector.AI.Vision.FastVLM;
 using PoopDetector.Models;
 using PoopDetector.Services;
 using SkiaSharp;
@@ -30,11 +31,19 @@ public partial class PoopCameraViewModel : ObservableObject
     private CameraInfo _selectedCamera;
     private ObservableCollection<CameraInfo> _cameras = new();
 
+    // VLM analysis helper
+    public VlmAnalysisHelper VlmHelper { get; }
+
     // ────────────────────────── ctor ────────────────────────────
     public PoopCameraViewModel(CameraView cameraView)
     {
         _cameraView = cameraView;
         _modelTypes = new ObservableCollection<VisionModelManager.ModelTypes>(Enum.GetValues<VisionModelManager.ModelTypes>());
+        
+        // Initialize VLM helper with a function to get the current VLM model
+        VlmHelper = new VlmAnalysisHelper(cameraView, () => 
+            VisionModelManager.Instance.CurrentModel as FastVlm);
+        
         VisionModelManager.Instance.DownloadError +=
         async (_, msg) => await MainThread.InvokeOnMainThreadAsync(
             () => Application.Current.MainPage
@@ -46,10 +55,6 @@ public partial class PoopCameraViewModel : ObservableObject
     [ObservableProperty] private bool samRunning;
     [ObservableProperty] private bool torchOn;
     [ObservableProperty] private bool skipSam;
-
-    // hook to refresh AcceptPictureCommand
-    //partial void OnSamResultReadyChanged(bool value) =>
-    //    AcceptPictureCommand.NotifyCanExecuteChanged();
 
     // ────────────────────────── public state helpers ────────────
     public bool HasTorch => _selectedCamera?.HasFlashUnit == true;
@@ -117,99 +122,7 @@ public partial class PoopCameraViewModel : ObservableObject
         }
     }
 
-    // --------- FastVLM prompt + output (one-shot) ---------
-    [ObservableProperty]
-    private string promptText = "Describe what you see";
-    //private string promptText = "You are a vision assistant. Answer strictly JSON with keys: feces:boolean, confidence:number, explanation:string. Question: Does this image contain visible feces?";
-
-    [ObservableProperty]
-    private string lastVlmJson;
-
-    // --------- Progressive Response Display ---------
-    [ObservableProperty]
-    private string progressiveResponse = "";
-
-    [ObservableProperty]
-    private bool isGeneratingResponse = false;
-
-    // Property to control when answer box should be visible
-    public bool ShouldShowAnswerBox => IsGeneratingResponse && !string.IsNullOrWhiteSpace(ProgressiveResponse);
-
-    // Override property change to notify ShouldShowAnswerBox changes
-    partial void OnProgressiveResponseChanged(string value)
-    {
-        OnPropertyChanged(nameof(ShouldShowAnswerBox));
-    }
-
-    partial void OnIsGeneratingResponseChanged(bool value)
-    {
-        OnPropertyChanged(nameof(ShouldShowAnswerBox));
-    }
-
-    [RelayCommand]
-    private void ClearVlmResponse()
-    {
-        IsGeneratingResponse = false;
-        ProgressiveResponse = "";
-    }
-
-    [RelayCommand]
-    private async Task AnalyzeWithVlm()
-    {
-        try
-        {
-            if (VisionModelManager.Instance.CurrentModel == null)
-                return;
-
-            // Show progressive response UI and reset previous content
-            IsGeneratingResponse = true;
-            ProgressiveResponse = "🤔 Analyzing image...";
-
-            // capture single frame
-            Stream stream;
-            if (DeviceInfo.Platform == DevicePlatform.Android || DeviceInfo.Platform == DevicePlatform.iOS)
-                stream = _cameraView.GetSnapShotStream(Camera.MAUI.ImageFormat.JPEG);
-            else
-                stream = await _cameraView.TakePhotoAsync(Camera.MAUI.ImageFormat.JPEG);
-
-            if (stream == null) 
-            {
-                IsGeneratingResponse = false;
-                return;
-            }
-            
-            using var ms = new MemoryStream();
-            await stream.CopyToAsync(ms);
-
-            // Use streaming API with callback to update progressive response
-            await VisionModelManager.Instance.AnalyzeWithVlmStreamAsync(
-                ms.ToArray(), 
-                PromptText, 
-                400,
-                (partialResponse) =>
-                {
-                    // Update UI on main thread
-                    MainThread.BeginInvokeOnMainThread(() =>
-                    {
-                        ProgressiveResponse = partialResponse;
-                    });
-                }
-            );
-
-            
-            // Final result
-            LastVlmJson = ProgressiveResponse;
-            
-            // Keep the progressive response visible - user can manually dismiss or start new analysis
-            // IsGeneratingResponse remains true to keep the response visible
-        }
-        catch (Exception ex)
-        {
-            LastVlmJson = $"{DateTime.Now:o} error: {ex.Message}";
-            ProgressiveResponse = $"Error: {ex.Message}";
-            // Keep IsGeneratingResponse true to show the error message
-        }
-    }    // ────────────────────────── prediction storage ──────────────
+    // ────────────────────────── prediction storage ──────────────
     public PredictionResult CurrentPrediction { get; private set; }
     public List<PredictionResult> LastPredictions { get; } = new(5);
 
