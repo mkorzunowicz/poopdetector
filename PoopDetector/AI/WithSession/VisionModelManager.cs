@@ -19,7 +19,8 @@ public partial class VisionModelManager : ObservableObject
             { ModelTypes.YoloxNanoPoop, "yolox_nano_poop_cropped_only_best.onnx" },
             { ModelTypes.Yolov9ScatSpotter, "yolov9_poop.onnx" },
             { ModelTypes.YoloxNano, "yolox_nano.onnx" },
-            { ModelTypes.ShitspotterCustomV2, "shitspotter-custom-v2.onnx" },
+            { ModelTypes.ShitspotterCustomV2, "shitspotter_custom_v2_epoch126.onnx" },
+            { ModelTypes.ShitspotterCustomV5, "shitspotter-custom-v5-epoch_115.onnx" },
         };
 
     static readonly IReadOnlyDictionary<ModelTypes, string> _legacyModelUrls =
@@ -39,7 +40,11 @@ public partial class VisionModelManager : ObservableObject
             },
             {
                 ModelTypes.ShitspotterCustomV2,
-                "https://raw.githubusercontent.com/Erotemic/poopdetector/main/Resources/Raw/shitspotter-custom-v2.onnx"
+                "https://github.com/Erotemic/poop_models/raw/refs/heads/main/shitspotter_custom_v2_epoch126.onnx"
+            },
+            {
+                ModelTypes.ShitspotterCustomV5,
+                "https://raw.githubusercontent.com/Erotemic/poop_models/main/shitspotter-custom-v5-epoch_115.onnx"
             }
         };
 
@@ -249,7 +254,10 @@ public partial class VisionModelManager : ObservableObject
                 new Yolov9.Yolov9(modelPath, YoloXColormap.PoopList),
 
             ModelTypes.ShitspotterCustomV2 =>
-                new Yolov9.Yolov9(modelPath, YoloXColormap.PoopList),
+                new YoloX.YoloX(modelPath, 416, 416, YoloXColormap.PoopList),
+
+            ModelTypes.ShitspotterCustomV5 =>
+                new YoloX.YoloX(modelPath, 416, 416, YoloXColormap.PoopList),
 
             _ => throw new ArgumentOutOfRangeException()
         };
@@ -274,5 +282,6 @@ public partial class VisionModelManager : ObservableObject
         Yolov9ScatSpotter,
         YoloxNano,
         ShitspotterCustomV2,
+        ShitspotterCustomV5,
     }
 }

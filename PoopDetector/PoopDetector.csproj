@@ -85,6 +85,7 @@
                 <None Remove="Resources\Raw\yolox_nano.onnx" />
                 <None Remove="Resources\Raw\yolox_nano_poop_cropped_only_best.onnx" />
                 <None Remove="Resources\Raw\shitspotter-custom-v2.onnx" />
+                <None Remove="Resources\Raw\shitspotter-custom-v5-epoch_115.onnx" />
         </ItemGroup>
 
 	<ItemGroup>

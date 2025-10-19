@@ -128,7 +128,11 @@ ssh -p 2222 user@localhost
 
 cd $HOME/code/shitspotter/tpl/poopdetector
 
+git pull 
+git checkout flexible_model_config
+
 #>
+
 
 
 # Move the models to the appropriate place to bake them in
@@ -137,6 +141,10 @@ ls .\PoopDetector\Resources\Raw\
 cp ..\poop_models\shitspotter-custom-v5-epoch_115.onnx .\PoopDetector\Resources\Raw\shitspotter-custom-v5-epoch_115.onnx
 cp ..\poop_models\shitspotter_custom_v2_epoch126.onnx .\PoopDetector\Resources\Raw\shitspotter_custom_v2_epoch126.onnx
 
+# Place to add new models is:
+# ~/code/shitspotter/tpl/poopdetector/PoopDetector/AI/WithSession/VisionModelManager.cs
+# ~/code/shitspotter/tpl/poopdetector/PoopDetector/PoopDetector.csproj
+# ~/code/shitspotter/tpl/poopdetector/PoopDetector/appsettings.json
 
 # Build and install dependencies
 $AndroidSdk='C:\work\android-sdk'
@@ -164,17 +172,6 @@ ls .\PoopDetector\bin\Release\net9.0-android\com.poop.detector-Signed.apk
 
 ############
 
-# Optional install android emulator on windows VM
-$SdkRoot = "$env:LOCALAPPDATA\Android\Sdk"
-& "$SdkRoot\cmdline-tools\latest\bin\sdkmanager.bat" --sdk_root=$SdkRoot "system-images;android-34;google_apis;x86_64"
-& "$SdkRoot\cmdline-tools\latest\bin\avdmanager.bat" create avd -n Pixel_6_API_34 -k "system-images;android-34;google_apis;x86_64" --device "pixel_6"
-
-# Start the emulator
-$SdkRoot = "$env:LOCALAPPDATA\Android\Sdk"
-& "$SdkRoot\emulator\emulator.exe" -avd Pixel_6_API_34 -gpu host -no-boot-anim -no-snapshot
-
-### Install android tools
-winget install --id Google.AndroidSDK.PlatformTools -e
 
 
 ### ON linux
@@ -197,7 +194,14 @@ VBoxManage controlvm "$VM_NAME" poweroff
 export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
 echo 'export PATH="$ANDROID_SDK_ROOT/platform-tools:$PATH"' >> ~/.bashrc
 export PATH="$ANDROID_SDK_ROOT/platform-tools:$PATH"
-"$ANDROID_SDK_ROOT"/emulator/emulator -avd pixel_34 -no-boot-anim -netdelay none -netspeed full 
+#"$ANDROID_SDK_ROOT"/emulator/emulator -avd pixel_34 -no-boot-anim -netdelay none -netspeed full 
+$ANDROID_SDK_ROOT/emulator/emulator -avd pixel_34 \
+  -no-accel \
+  -gpu swiftshader_indirect \
+  -no-snapshot \
+  -no-boot-anim \
+  -skin 480x800 -memory 2048
+
 
 
 adb devices
