@@ -220,6 +220,11 @@ adb devices
 
 adb install -r -d -t com.poop.detector-Signed.apk 
 
+# Force install to the real android instead of the emulator
+REAL_DEVICE_NAME=$(adb devices | awk '/^[A-Za-z0-9:-]+\s+device$/ && $1 !~ /emulator-/ {print $1; exit}')
+echo "REAL_DEVICE_NAME=$REAL_DEVICE_NAME"
+adb -s "$REAL_DEVICE_NAME" install -r -d -t com.poop.detector-Signed.apk 
+
 #rsync -avRP gadget:code/poopdetector/poopdetector/PoopDetector/bin/Release/net9.0-android/./com.poop.detector.apk .
 #rsync -avRP gadget:code/poopdetector/poopdetector/PoopDetector/bin/Release/net9.0-android/./com.poop.detector-Signed.apk .
  
