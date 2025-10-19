@@ -1,7 +1,7 @@
 ﻿// PoopDetector.AI.Vision.Services.ModelCache.cs
 // --------------------------------------------------------------
+using System.IO;
 using System.Net;
-using System.Security.Cryptography;
 using PoopDetector.AI.Vision;
 
 namespace PoopDetector.Services;
@@ -27,7 +27,7 @@ public static class ModelCache
         if (await Utils.PackageResourceAvailable(fileName))
             return fileName;
 
-            string dir = FileSystem.Current.AppDataDirectory;
+        string dir = FileSystem.Current.AppDataDirectory;
         Directory.CreateDirectory(dir);
 
         string path = Path.Combine(dir, fileName);
@@ -115,6 +115,30 @@ public static class ModelCache
         if (remoteSize.HasValue && readTotal != remoteSize.Value)
             throw new IOException("Downloaded size mismatch (file may be corrupt).");
 
+        return path;
+    }
+    public static async Task<string> EnsurePackagedCopyAsync(
+        string fileName,
+        CancellationToken cancel = default)
+    {
+        if (!await Utils.PackageResourceAvailable(fileName))
+            throw new FileNotFoundException($"Packaged model '{fileName}' was not found in the app bundle.");
+
+        string dir = FileSystem.Current.AppDataDirectory;
+        Directory.CreateDirectory(dir);
+
+        string path = Path.Combine(dir, fileName);
+        if (File.Exists(path))
+            return path;
+
+        await using FileStream dst = new(
+            path,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None);
+
+        using Stream src = await FileSystem.Current.OpenAppPackageFileAsync(fileName);
+        await src.CopyToAsync(dst, 81920, cancel);
         return path;
     }
     // ───────────────────────────────────────────────────────────────────────────

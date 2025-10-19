@@ -68,23 +68,25 @@
 		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
 	</ItemGroup>
 
-	<ItemGroup>
-		<None Remove="appsettings.json" />
-		<None Remove="Resources\Fonts\fa_solid.ttf" />
-		<None Remove="Resources\Images\camera_icon.svg" />
-		<None Remove="Resources\Images\distance_icon.svg" />
-		<None Remove="Resources\Images\home_icon.svg" />
-		<None Remove="Resources\Images\map_icon.svg" />
-		<None Remove="Resources\Images\paw_icon.svg" />
-		<None Remove="Resources\Images\poop_icon.svg" />
-		<None Remove="Resources\Images\poop_icon_overlay.svg" />
-		<None Remove="Resources\Images\progress_icon.svg" />
-		<None Remove="Resources\Images\rewards_icon.svg" />
-		<None Remove="Resources\Images\smile.png" />
-		<None Remove="Resources\Raw\initialanimation.json" />
-		<None Remove="Resources\Raw\yolox_nano.onnx" />
-		<None Remove="Resources\Raw\yolox_nano_poop_cropped_only_best.onnx" />
-	</ItemGroup>
+        <ItemGroup>
+                <None Remove="appsettings.json" />
+                <None Remove="Resources\Fonts\fa_solid.ttf" />
+                <None Remove="Resources\Images\camera_icon.svg" />
+                <None Remove="Resources\Images\distance_icon.svg" />
+                <None Remove="Resources\Images\home_icon.svg" />
+                <None Remove="Resources\Images\map_icon.svg" />
+                <None Remove="Resources\Images\paw_icon.svg" />
+                <None Remove="Resources\Images\poop_icon.svg" />
+                <None Remove="Resources\Images\poop_icon_overlay.svg" />
+                <None Remove="Resources\Images\progress_icon.svg" />
+                <None Remove="Resources\Images\rewards_icon.svg" />
+                <None Remove="Resources\Images\smile.png" />
+                <None Remove="Resources\Raw\initialanimation.json" />
+                <None Remove="Resources\Raw\yolox_nano.onnx" />
+                <None Remove="Resources\Raw\yolox_nano_poop_cropped_only_best.onnx" />
+                <None Remove="Resources\Raw\shitspotter-custom-v2.onnx" />
+                <None Remove="Resources\Raw\shitspotter-custom-v5-epoch_115.onnx" />
+        </ItemGroup>
 
 	<ItemGroup>
 		<EmbeddedResource Include="appsettings.json">
